@@ -17,7 +17,7 @@
       <div class="feature-count">
         <img src="./assets/custom-marker.png" alt="Custom Marker" />
         {{ displayedFeatureCount }}
-      </div>
+      </div> 
 
 
 
