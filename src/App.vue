@@ -20,19 +20,27 @@
       </div>   
 
 
+    <div class="filter-buttons">
+      <button @click="applyFilters">Применить</button>
+      <button @click="resetFilters">Сбросить</button>
+    </div>
+    <br>
 
-      <div v-for="clause in clauses" :key="clause">
-        <input type="checkbox" :value="clause" v-model="selectedClauses"> {{ clause }}
+      <div v-for="clause in clauses" :key="clause"  class="filter-div">
+        <input type="checkbox" :value="clause" v-model="selectedClauses"> 
+        <span class="filter-label">{{ clause }} </span>
       </div>
  
-      <div v-for="tag in tags" :key="tag">
-        <input type="checkbox" :value="tag" v-model="selectedTags"> {{ tag }}
+      <div v-for="tag in tags" :key="tag"   class="filter-div">
+        <input type="checkbox" :value="tag" v-model="selectedTags"> 
+        <span class="filter-label">{{ tag }}</span>
       </div>
        <!-- Filter by Linkink -->
-       <div>
+       <div   class="filter-div">
         <label>
           <input type="checkbox" v-model="filterLinkink">
-          Связь
+          <span class="filter-label">группа поддержки</span>
+          
         </label>
       </div>
       
@@ -234,39 +242,42 @@ export default {
       this.selectedFeature = null;
     },
     applyFilters() {
-  // Filter features based on selected clauses, tags, and 'linkink' value
-      const filteredFeatures = this.geojsonData.features.filter((feature) => {
-        const matchesClause = this.selectedClauses.length
-          ? feature.properties.clauses.some((clause) => this.selectedClauses.includes(clause))
-          : true;
+    // Filter features based on selected clauses, tags, and 'linkink' value
+    const filteredFeatures = this.geojsonData.features.filter((feature) => {
+      const matchesClause = this.selectedClauses.length
+        ? feature.properties.clauses && feature.properties.clauses.some((clause) => this.selectedClauses.includes(clause))
+        : true;
 
-        const matchesTag = this.selectedTags.length
-          ? feature.properties.tags.some((tag) => this.selectedTags.includes(tag))
-          : true;
+      const matchesTag = this.selectedTags.length
+        ? feature.properties.tags && feature.properties.tags.some((tag) => this.selectedTags.includes(tag))
+        : true;
 
-        const matchesLinkink = this.filterLinkink
-          ? feature.properties.linkink && feature.properties.linkink.trim() !== ''
-          : true;
+      const matchesLinkink = this.filterLinkink
+        ? feature.properties.linkink && feature.properties.linkink.trim() !== ''
+        : true;
 
-        return matchesClause && matchesTag && matchesLinkink;
-      });
+      return matchesClause && matchesTag && matchesLinkink;
+    });
 
-      // Update the displayed feature count
-      this.displayedFeatureCount = filteredFeatures.length;
+    // Update the displayed feature count
+    this.displayedFeatureCount = filteredFeatures.length;
 
-      // Re-group features by coordinates
-      this.featuresByCoordinates = {};
-      filteredFeatures.forEach((feature) => {
-        const coords = feature.geometry.coordinates.join(',');
-        if (!this.featuresByCoordinates[coords]) {
-          this.featuresByCoordinates[coords] = [];
-        }
-        this.featuresByCoordinates[coords].push(feature);
-      });
+    // Re-group features by coordinates
+    this.featuresByCoordinates = {};
+    filteredFeatures.forEach((feature) => {
+      const coords = feature.geometry.coordinates.join(',');
+      if (!this.featuresByCoordinates[coords]) {
+        this.featuresByCoordinates[coords] = [];
+      }
+      this.featuresByCoordinates[coords].push(feature);
+    });
 
-      // Re-add markers to the map
-      this.addMarkers();
-    },
+    // Re-add markers to the map
+    this.addMarkers();
+
+    // Close the filters panel
+    this.filtersVisible = false;
+  },
 
   resetFilters() {
       // Reset all filter selections
@@ -280,6 +291,9 @@ export default {
 
       // Apply filters to refresh the map
       this.applyFilters();
+
+      // Close the filters panel
+      this.filtersVisible = false;
     }, 
   },
 };
@@ -537,8 +551,19 @@ body{
   filter: saturate(0);
   width: 20px;
   height: 20px;
+  position: absolute;
 }
-
+.filter-label { 
+  display: block; 
+  margin-left: 35px; 
+    
+  margin-top: 3px;
+}
+.filter-div{
+  margin-bottom: 5px;
+  position: relative;
+  padding-top: 5px;
+}
 
 .feature-count img{
   filter: invert(1);
