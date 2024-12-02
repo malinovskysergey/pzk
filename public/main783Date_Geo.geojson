@@ -11564,8 +11564,8 @@
                 "geocodeStatus": "rf",
                 "postcode": null,
                 "postcodeStatus": "Ожидание",
-                "date": null,
-                "dateStatus": "Ожидание"
+                "date": "2001-08-13T00:00:00",
+                "dateStatus": "True"
             }
         },
         {
