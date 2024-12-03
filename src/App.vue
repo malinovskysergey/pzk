@@ -124,7 +124,17 @@
                 {{ isPlaying ? 'П' : '▶' }}
               </button>
             </div>
-
+               <!-- Speed Controls - Only visible during playback -->
+            <div class="speed-controls" v-if="isPlaying || isPlayingBackwards">
+              <button 
+                v-for="speed in speeds" 
+                :key="speed.value"
+                :class="['control-button', { active: playbackSpeed === speed.value }]"
+                @click="setPlaybackSpeed(speed.value)"
+              >
+                {{ speed.label }}
+              </button>
+            </div>
           </div>
 
           <!-- Group 3: Stats -->
@@ -510,14 +520,14 @@ export default {
       ],
       playbackSpeed: 1,
       isPlaying: false,
-      isPlayingBackwards: false,
-      playDirection: 1,
+      isPlayingBackwards: false, 
       playbackInterval: null,
       showRangeOverlay: false,
       isDragging: false,
       dragStartX: null,
       tooltipData: null,
-      tooltipStyle: null
+      tooltipStyle: null,
+      playDirection: 'rtl'
     };
   }, 
   computed: {
@@ -974,6 +984,7 @@ getBarOpacity(month) {
       }
     },
     toggleGraphMode() {
+      this.stopAllPlayback();
       this.isGraphMode = !this.isGraphMode;
       if (this.isGraphMode) {
         this.$nextTick(() => {
@@ -982,14 +993,10 @@ getBarOpacity(month) {
           this.scrollHistogramToEnd();
         });
       } else {
-        // Stop any ongoing playback
-        this.stopAllPlayback();
-        // Reset to initial state
         this.selectedRange = 'all';
         this.showRangeOverlay = false;
         this.startDate = this.minDate;
         this.endDate = this.maxDate;
-        // Apply filters to show all features
         this.applyFilters();
       }
     },
@@ -1083,17 +1090,41 @@ getBarOpacity(month) {
       return monthStart >= this.startDate && monthStart <= this.endDate;
     },
 
+    handleRangeDirection(date) {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      
+      if (year === 2000 && month === 0) {
+        this.playDirection = 'ltr';
+      } else if (year === 2024 && month === 11) {
+        this.playDirection = 'rtl';
+      }
+      
+      return this.playDirection;
+    },
+
     setRangeFromDate(date) {
       if (this.selectedRange === 'all') return;
       
+      const direction = this.handleRangeDirection(date);
       const rangeMonths = this.ranges.find(r => r.value === this.selectedRange).months;
       
       if (this.selectedRange === 'month') {
-        this.startDate = new Date(date.getFullYear(), date.getMonth(), 1);
-        this.endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        if (direction === 'ltr') {
+          this.startDate = new Date(date.getFullYear(), date.getMonth(), 1);
+          this.endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        } else {
+          this.endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+          this.startDate = new Date(date.getFullYear(), date.getMonth(), 1);
+        }
       } else {
-        this.endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-        this.startDate = new Date(date.getFullYear(), date.getMonth() - (rangeMonths - 1), 1);
+        if (direction === 'ltr') {
+          this.startDate = new Date(date.getFullYear(), date.getMonth(), 1);
+          this.endDate = new Date(date.getFullYear(), date.getMonth() + rangeMonths, 0);
+        } else {
+          this.endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+          this.startDate = new Date(date.getFullYear(), date.getMonth() - (rangeMonths - 1), 1);
+        }
       }
       
       this.showRangeOverlay = true;
@@ -1128,38 +1159,41 @@ getBarOpacity(month) {
   },
 
   moveRange(step) {
-    if (!this.startDate || !this.endDate || this.selectedRange === 'all') return;
-    
-    const rangeMonths = this.ranges.find(r => r.value === this.selectedRange).months;
-    const newStartDate = new Date(this.startDate);
-    const newEndDate = new Date(this.endDate);
-    
-    if (this.selectedRange === 'month') {
-      newStartDate.setMonth(this.startDate.getMonth() + step);
-      newEndDate.setMonth(this.endDate.getMonth() + step);
-    } else {
-      newStartDate.setMonth(this.startDate.getMonth() + (step * rangeMonths));
-      newEndDate.setMonth(this.endDate.getMonth() + (step * rangeMonths));
-    }
+      if (!this.startDate || !this.endDate || this.selectedRange === 'all') return;
+      
+      const rangeMonths = this.ranges.find(r => r.value === this.selectedRange).months;
+      let newStartDate = new Date(this.startDate);
+      let newEndDate = new Date(this.endDate);
+      
+      if (this.selectedRange === 'month') {
+        newStartDate.setMonth(this.startDate.getMonth() + step);
+        newEndDate.setMonth(this.endDate.getMonth() + step);
+      } else {
+        newStartDate.setMonth(this.startDate.getMonth() + (step * rangeMonths));
+        newEndDate.setMonth(this.endDate.getMonth() + (step * rangeMonths));
+      }
 
-    // Check bounds and update dates
-    if (step > 0 && newEndDate > this.maxDate) {
-      const firstDate = new Date(Math.min(...this.monthlyData.map(m => new Date(m.date))));
-      this.setRangeFromDate(firstDate);
-    } else if (step < 0 && newStartDate < this.minDate) {
-      const lastDate = new Date(Math.max(...this.monthlyData.map(m => new Date(m.date))));
-      this.setRangeFromDate(lastDate);
-    } else {
-      this.startDate = newStartDate;
-      this.endDate = newEndDate;
+      // Handle direction switch at bounds
+      if (newStartDate.getFullYear() === 2000 && newStartDate.getMonth() === 0) {
+        this.playDirection = 'ltr';
+        this.startDate = new Date(2000, 0, 1);
+        this.endDate = new Date(2000, rangeMonths, 0);
+      } else if (newEndDate.getFullYear() === 2024 && newEndDate.getMonth() === 11) {
+        this.playDirection = 'rtl';
+        this.endDate = new Date(2024, 11, 31);
+        this.startDate = new Date(2024, 12 - rangeMonths, 1);
+      } else if (step > 0 && newEndDate > this.maxDate) {
+        this.setRangeFromDate(new Date(2000, 0, 1));
+      } else if (step < 0 && newStartDate < this.minDate) {
+        this.setRangeFromDate(new Date(2024, 11, 1));
+      } else {
+        this.startDate = newStartDate;
+        this.endDate = newEndDate;
+      }
+      
       this.applyDateFilter();
-    }
-
-    // Scroll to keep the current range in view
-    this.$nextTick(() => {
       this.scrollToCurrentRange();
-    });
-  },
+    },
 
     playBackwards() {
       this.playDirection = -1;
@@ -1167,11 +1201,19 @@ getBarOpacity(month) {
     },
 
     startPlayback() {
+      if (this.playbackInterval) {
+        clearInterval(this.playbackInterval);
+      }
+      
       this.isPlaying = true;
       const intervalTime = 1000 / this.playbackSpeed;
       
       this.playbackInterval = setInterval(() => {
-        this.moveRange(this.playDirection);
+        const startYear = new Date(this.startDate).getFullYear();
+        if (startYear === 2000 && this.playDirection === 'rtl') {
+          this.playDirection = 'ltr';
+        }
+        this.moveRange(this.playDirection === 'rtl' ? -1 : 1);
       }, intervalTime);
     },
 
@@ -1182,7 +1224,7 @@ getBarOpacity(month) {
       if (this.isPlayingBackwards) {
         this.stopAllPlayback();
       } else {
-        this.playDirection = -1;
+        this.playDirection = 'rtl';
         this.isPlayingBackwards = true;
         this.startPlayback();
       }
@@ -1195,7 +1237,7 @@ getBarOpacity(month) {
       if (this.isPlaying) {
         this.stopAllPlayback();
       } else {
-        this.playDirection = 1;
+        this.playDirection = 'ltr';
         this.isPlaying = true;
         this.startPlayback();
       }
@@ -2215,7 +2257,7 @@ body {
   background-color: rgba(255, 255, 255, 0.9);
   padding: 10px;
   z-index: 1;
-  max-height: 80vh;
+  max-height: calc(100vh - 390px);
   overflow-y: auto;
   border-radius: 4px;
   min-width: 500px;
@@ -2872,7 +2914,7 @@ body{
 .range-selection-overlay {
   position: absolute;
   height: 100%;
-  background: rgba(237, 6, 0, 0.3);
+  background: rgba(255, 255, 255, 0.3);
   pointer-events: none;
   z-index: 1;
   transition: left 0.3s ease, width 0.3s ease;
