@@ -18,7 +18,7 @@
     <div class="filters-toggle-container" ref="filtersToggleContainer">
       <!-- Feature Count -->
       <div class="feature-count">
-        <img src="/custom-marker.png" alt="Custom Marker" />
+        <img src="/custom-marker-hover.png" alt="Custom Marker" />
         {{ displayedFeatureCount }}
       </div>
       <!-- Search input -->
@@ -76,70 +76,71 @@
     </div>
 <!-- Date Controls Container -->
 <div class="date-controls-container">
-    <div class="control-buttons-row">
-      <button class="control-button" :class="{ active: isGraphMode }" @click="toggleGraphMode">
-        Графики
-      </button>
+    <!-- Combined container for all controls -->
+    <div class="date-slider-container">
+      <!-- Control buttons row - now inside date-slider-container -->
+      <div class="control-buttons-row">
+        <!-- Group 1: Graph Toggle -->
+        <button class="control-button" :class="{ active: isGraphMode }" @click="toggleGraphMode">
+          Графики
+        </button>
 
-      <template v-if="isGraphMode">
-        <!-- Checkbox -->
-        <div class="filter-checkbox">
-          <input type="checkbox" checked disabled />
-          <span>Есть данные</span>
-        </div>
+        <!-- Group 2: Only show when graph mode is active -->
+        <template v-if="isGraphMode">
+          <div class="controls-group">
+            <!-- Checkbox -->
+            <div class="filter-checkbox">
+              <input type="checkbox" checked disabled />
+              <span>Есть данные</span>
+            </div>
 
-        <!-- Range Controls -->
-        <div class="range-controls">
-          <button 
-            v-for="range in ranges" 
-            :key="range.value"
-            :class="['control-button', { active: selectedRange === range.value }]"
-            @click="setRange(range.value)"
-          >
-            {{ range.label }}
-          </button>
-        </div>
+            <!-- Range Controls -->
+            <div class="range-controls">
+              <button 
+                v-for="range in ranges" 
+                :key="range.value"
+                :class="['control-button', { active: selectedRange === range.value }]"
+                @click="setRange(range.value)"
+              >
+                {{ range.label }}
+              </button>
+            </div>
 
-        <!-- Playback Controls -->
-        <div class="playback-controls" v-if="selectedRange !== 'all'">
-    <button 
-     :class="['control-button', { active: isPlayingBackwards }]"
-      @click="toggleBackwardsPlay"
-      :disabled="!canPlay"
-    >
-      <span v-if="isPlayingBackwards">⏸</span>
-      <span v-else :style="{ transform: 'rotate(180deg)', display: 'inline-block' }">▶</span>
-    </button>
-    <button 
-      :class="['control-button', { active: isPlaying }]"
-      @click="togglePlayback"
-      :disabled="!canPlay"
-    >
-      {{ isPlaying ? '⏸' : '▶' }}
-    </button>
-    
-    <!-- Speed Controls - Only visible during playback -->
-    <div class="speed-controls" v-if="isPlaying || isPlayingBackwards">
-      <button 
-        v-for="speed in speeds" 
-        :key="speed.value"
-        :class="['control-button', { active: playbackSpeed === speed.value }]"
-        @click="setPlaybackSpeed(speed.value)"
-      >
-        {{ speed.label }}
-      </button>
-    </div>
-  </div>
-      </template>
-    </div>
+            <!-- Playback Controls -->
+            <div class="playback-controls" v-if="selectedRange !== 'all'">
+              <button 
+                :class="['control-button', { active: isPlayingBackwards }]"
+                @click="toggleBackwardsPlay"
+                :disabled="!canPlay"
+              >
+                <span v-if="isPlayingBackwards">П</span>
+                <span v-else :style="{ transform: 'rotate(180deg)', display: 'inline-block' }">▶</span>
+              </button>
+              <button 
+                :class="['control-button', { active: isPlaying }]"
+                @click="togglePlayback"
+                :disabled="!canPlay"
+              >
+                {{ isPlaying ? 'П' : '▶' }}
+              </button>
+            </div>
 
-    <div v-if="isGraphMode" class="date-slider-container">
-      <div class="selected-dates">
-        <span>{{ formattedStartDate }}</span>
-        <span>{{ formattedEndDate }}</span>
+          </div>
+
+          <!-- Group 3: Stats -->
+          <div class="stats-group">
+            <div class="date-stats">
+              {{ formattedStartDate }} - {{ formattedEndDate }}
+              <span class="">  -  {{ displayedFeatureCount }}</span>
+            </div>
+          </div>
+        </template>
       </div>
 
-      <div class="histogram-wrapper">
+      <!-- Histogram section -->
+      <div v-if="isGraphMode" class="histogram-wrapper">
+        <div class="histogram-scroll-container">
+          <div class="histogram-wrapper">
         <div class="histogram-scroll-container">
           <div class="histogram-container"  @click="handleHistogramClick">
             <div 
@@ -196,11 +197,16 @@
     <div>Количество: {{ tooltipData.count }}</div>
   </div>
 
+        </div>
+      </div>
+
+ 
+
+
 
 
     </div>
   </div>
-
 
 
     <!-- Names Filter -->
@@ -477,11 +483,11 @@ export default {
       dateSlider: null,
       previousCoordinates: new Set(), 
       dateSliderEnabled: false,
-      currentDate: new Date(),
+      currentDate:new Date(2024, 11, 31),
       startDate: null,
       endDate: null,
       minDate:  new Date(2000, 0, 1),
-      maxDate: null,
+      maxDate: new Date(2024, 11, 31),
       monthlyData: [],
       maxCount: 0,
       selectedYear: null,
@@ -706,6 +712,7 @@ beforeUnmount() {
 
       mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZWk4ZXB1In0.24OWriNL8SBYXoLdBtO9EA'; // Replace with your Mapbox access token
    
+      
          this.map = new mapboxgl.Map({
         container: this.$refs.mapContainer,
         style: 'mapbox://styles/mapbox/navigation-night-v1',
@@ -753,24 +760,23 @@ beforeUnmount() {
 
     // Update processDateData method with proper dates array
     processDateData() {
-  if (!this.geojsonData?.features) return;
+      if (!this.geojsonData?.features) return;
 
-  // Collect features with valid dates
-  const datedFeatures = this.geojsonData.features.filter(feature => {
-    const date = feature.properties.date ? new Date(feature.properties.date) : null;
-    return date && !isNaN(date.getTime());
-  });
+// Collect features with valid dates
+const datedFeatures = this.geojsonData.features.filter(feature => {
+  const date = feature.properties.date ? new Date(feature.properties.date) : null;
+  return date && !isNaN(date.getTime());
+});
 
-  if (datedFeatures.length === 0) return;
- 
-  // Determine min and max dates
-  this.minDate = new Date(2000, 0, 1);
-  this.maxDate = new Date(Math.max(...datedFeatures.map(f => new Date(f.properties.date))));
+if (datedFeatures.length === 0) return;
 
-  // Initialize startDate and endDate
-  this.startDate = new Date(this.minDate);
-  this.endDate = new Date(this.maxDate);
+// Set fixed date range
+this.minDate = new Date(2000, 0, 1);
+this.maxDate = new Date(2024, 11, 31);
 
+// Initialize startDate and endDate
+this.startDate = new Date(this.minDate);
+this.endDate = new Date(this.maxDate);
   // Generate monthlyData
   const monthCounts = {};
   datedFeatures.forEach(feature => {
@@ -2147,7 +2153,6 @@ resetDateFilters() {
   margin-top: 10px;
   text-align: center;
 }
-
 .play-pause-controls button {
   padding: 6px 12px;
   background-color: #51bbd6;
@@ -2156,13 +2161,9 @@ resetDateFilters() {
   border-radius: 4px;
   cursor: pointer;
 }
-
 .play-pause-controls button:hover {
   background-color: #429ab8;
 }
- 
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
-
 body {
   font-family: 'Montserrat', sans-serif;
 }
@@ -2185,7 +2186,7 @@ body {
 
 /* Custom marker styles */
 .custom-marker {
-  background-image: url('./assets/custom-marker.png'); /* Replace with your image path */
+  background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAAACXBIWXMAAAsSAAALEgHS3X78AAAFZElEQVRYhcWZz0+cRRjHvzPzbsNW2uwmpm8xttrWrcphlzQW0jSeTEF7ay+mRhN/0dve+geQ3rxVMDHSRK9yaeOpHLSaCLRgpGUPhBatIobsCrweJEJ935mvh87gQIEFd5d+L/vmfed55jPP+84zM88CNUoppQDg2LFj++7fv//V7OzsjUKhsB8AUqmUqtV/TQqCQAFAR0fH4fn5+R9ptbi4ONHZ2XnEb/PE4Lq6uo6QfGCMoTEm0VonWmuSnO3u7n4Z+C/KuyallASAkydPhlEUTZGk1jp2EdRax8YYxnH84PTp08/6Ng2XEEIAEC0tLcHc3Nw36+F8SJJcWFgYyuVyTQAgpRS7AagAYHBw8COSjOP4MTinJEn+IcmhoaGPU6kUAKhH42uQ3LdULBZfJWniODabwTnFcaxJslgsdvo+6i47chGGISqVyvckaYxJqgEaYzRJViqV8TAMU9ZX/cPoRt7T0/OWjUxVOC+KCUn29PS8DzQg9bgRh2GIcrk86kdmO3Jty+XynTAMpe+zLnLR6+7ufo0kkySp+u1tEEVNkpcuXXodqHMU3cwdHh7uJzdOK9XkbIaHh7/wfdYsl7taW1ub4jh+4L+yncjZJEky09ra2uz73rL/bQBKAGhvb88HQXBEa00hxI5XBSGE1FpTKXW4vb294PuuCRCAAIBCofAKAJDUO4VzcraFQqHd910ToDEGAJDP59uA1Xz4v+Rs8/l8wfpmTYBCCBhjTDqdRi6Xe8He24yQWmujtTYANuzY2eZyuefT6TSMMaw24GoRFABMU1OTam5uPrgFII0xUEpBKeWi/hiks21ubm5pamoKABhUec3b+thJpgDs3eyx1lpIKdHX19fd19f3rpSSWmuxEaTVXpJ7ttP3lnIjzmaz+6Ioqth0sSZJJ0miSfLq1asfOLv+/v637TOzLtUYkoyi6I9sNrvf76MhgFrrhCRv3779WRAEkFKmgiBIAcDg4OAnFjJpOGAmk0lHUTSzLkm7/v48c+bMYeDRrtntnE+dOvUMyQXbxvi2URT9lslk0vWMoIyiaHLdihCT5MjIyOcAIKUMPLsAAEZGRj7123qA97LZbLAdwGqThADkysqKWVpaKgMASdpfAQDXrl27YQFXJ4RSivbZ135bZ7u0tFReWVlJbP9b5sItAUlCSimXl5cxPT39k9cJpZQKAMfHx6f8zv1r+8y4tu7+9PT0r8vLy5BSCs9s54AA4JbLUqk04aA9/Q1g0XH5Y7O/kW2zOmDr6671XftS5zorlUo/ADveJq0BcLYTExNjvu+aAI1dFm7dulV6+PDhz0op4b3OpwA8vQGMu87AJniSVEoJrfXs2NhYyfddKyCllGpqamplaGjoW+fYGKMB4MSJEy8Ba2eju87n8y8CkMYY7WBGR0e/m5yc/EsIoWreLHgdAgAGBgYGnJ0QggBw/vz5Lgu9Cuiuz54922XtSVICwPXr178EgLqePl1EDhw4sHpo0lonXqI+ZDuVSikBrE3UbsUpl8t3wzBUvs+6yTt2XiAfHSWrLHW9bqnzjp0fAg2qeLkB24P7kF0ZErdZ6O/vf8+1vXz58gW3WXCH+0qlcicMwz3WV2PqH+tKH7SlD2N3Laa3t/edK1euvElSu3suesVi8Q3fR8O0SfHIaK0NSU0ysbsI4xWPeneleGQBBQC0tLSk5ubmbtoJE1sgbV+5cd/n4uLiyPHjx9PALpXfgDUFzINRFN3zIN0+0S9gHvJtdk1eCfgoyV9cOvFKwL9fvHix1cI92Tp1R0fHc/Pz83dcBBcWFkrnzp07+kThnBxAW1vb/pmZmcGZmZmbbW1tGaA+f0P8C3H0t/gtsh06AAAAAElFTkSuQmCC); /* Replace with your image path */
   background-size: cover;
   width: 20px;
   height: 20px;
@@ -2197,11 +2198,9 @@ body {
 .marker-single {
     /* Replace with your single-entry marker icon */
 }
-
 .marker-few {
     /* Replace with your 2-5 entries marker icon */
 }
-
 .marker-many {
    /* Replace with your >5 entries marker icon */
 }
@@ -2234,7 +2233,6 @@ body {
   justify-content: center; 
   z-index: 2;
 }
-
 .modal-content {
   background-color: white;
   padding: 20px;
@@ -2243,7 +2241,6 @@ body {
   border-radius: 4px;
   width: 300px;
 }
-
 .close-button {
   float: right;
   font-size: 24px;
@@ -2252,7 +2249,6 @@ body {
 
 
 /* filter: contrast(140%) grayscale(100%) saturate(0%) brightness(74%); */
-
 .mapboxgl-canvas{ 
   filter: contrast(140%) brightness(74%);
 }
@@ -2264,7 +2260,6 @@ body {
   z-index: 16; 
   gap: 10px;
 }
-
 .filters-toggle-container .feature-count {
   display: flex;
   align-items: center;
@@ -2280,13 +2275,11 @@ body {
   right: auto;
   top: auto;
 }
-
 .filters-toggle-container .feature-count img {
   width: 30px;
   margin-right: 8px;
   margin-bottom: 5px;
 }
-
 .filters-toggle-container .filters-toggle {
   padding: 8px 12px;
   background-color: rgba(255, 255, 255, 0.9);
@@ -2295,12 +2288,10 @@ body {
   cursor: pointer;
   text-align: left;
 }
-
 .filters-toggle-container .filters-toggle.active {
   background-color: #51bbd6;
   color: white;
 }
-
 .filters-toggle-container .filters-toggle:hover {
   background-color: #429ab8;
   color: white;
@@ -2310,7 +2301,6 @@ body {
   color: white !important;
   opacity: 0.8;
 }
-
 .filters-toggle-container .filters-toggle.active-panel, .filters-toggle-container .filters-toggle:hover{
   background-color: black !important;
   color: white;
@@ -2329,7 +2319,6 @@ body {
   align-items: center;
   color: white;
 }
-
 .feature-count img {
   width: 30px;
   margin-right: 8px;
@@ -2344,7 +2333,6 @@ body {
   display: flex;
   gap: 10px;
 }
-
 .filter-buttons-top button {
   padding: 8px 12px;
   background-color: rgba(255, 255, 255, 0.9);
@@ -2352,12 +2340,10 @@ body {
   border-radius: 4px;
   cursor: pointer;
 }
-
 .filter-buttons-top button.active {
   background-color: #51bbd6;
   color: white;
 }
-
 .filter-buttons-top button:hover {
   background-color: #429ab8;
   color: white;
@@ -2386,17 +2372,14 @@ body {
   font-size: 14px;
   color: #333;
 }
-
 .mapboxgl-popup-content h3 {
   margin-top: 0;
   font-size: 16px;
   color: #000;
 }
-
 .mapboxgl-popup-content p {
   margin: 5px 0;
 }
-
 .mapboxgl-popup-content button {
   margin-top: 10px;
   padding: 5px 10px;
@@ -2406,7 +2389,6 @@ body {
   border-radius: 4px;
   cursor: pointer;
 }
-
 .mapboxgl-popup-content button:hover {
   background-color: #429ab8;
 }
@@ -2424,7 +2406,6 @@ body {
   justify-content: center;
   z-index: 1000;
 }
-
 .modal-content {
   background: #fff;
   padding: 20px;
@@ -2436,19 +2417,16 @@ body {
   top: 80px;
   max-height: calc(100vh - 140px);
 }
-
 .modal-content h3 {
   margin-top: 0;
   font-size: 18px;
   color: #333;
 }
-
 .modal-content p {
   margin: 10px 0;
   font-size: 14px;
   color: #555;
 }
-
 .modal-content button {
   margin-top: 15px;
   padding: 8px 16px;
@@ -2459,7 +2437,6 @@ body {
   cursor: pointer;
   font-size: 14px;
 }
-
 .modal-content button:hover {
   background-color: #429ab8;
 }
@@ -2482,7 +2459,7 @@ background-color: transparent !important;
 }
 .modal-content, .modal-content *{
   background-color: #000009 !important;
-  color: #ddd !important; 
+  color: #ddd !important;
 }
 .modal-content button{
   position: absolute;
@@ -2495,8 +2472,6 @@ background-color: transparent !important;
 body{
   margin: 0 !important;
 }
-
-
 .filters-toggle {
   position: relative;
   top: 10px;
@@ -2524,7 +2499,6 @@ body{
 .filters > div{
   padding: 10px;
 }
-
 .modal li{
   list-style-type: none;
 }
@@ -2557,7 +2531,6 @@ body{
   position: relative;
   padding-top: 5px;
 }
-
 .feature-count img{ 
   display: block;
   margin-bottom: 10px;
@@ -2568,7 +2541,6 @@ body{
   right: 30px;
   text-align: center;
 }
-
 .feature-list-item{
   margin-bottom: 5px;
 }
@@ -2576,20 +2548,17 @@ body{
   margin-right: 10px;
 }
 @media (max-width: 980px) {
-  .modal-content button + h3{
+.modal-content button + h3{
     width: 100% !important;
     margin-top: 40px;
-  }
 }
-
-
+}
 #app .date-slider-container *{
   color: white !important;
 }
 .noUi-connect, .play-pause-controls button{
   background-color: rgba(0,0,0,0.6) !important;
 }
-
 .Linkink{
   display: none;
 }
@@ -2609,7 +2578,6 @@ body{
   justify-content: space-between;
   align-items: center;
 }
-
 .selected-dates span {
   flex: 1;
   text-align: center;
@@ -2630,7 +2598,6 @@ body{
   opacity: 0.5;
   cursor: pointer;
 }
-
 .search-input{
   position: relative;
   float: left;
@@ -2643,8 +2610,6 @@ body{
   top: 10px;
   outline: none !important;
 }
-
-
 .zoom-controls {
   position: absolute;
   bottom: 10px;
@@ -2657,7 +2622,6 @@ body{
   padding: 10px;
   border-radius: 4px;
 }
-
 .zoom-button {
   width: 30px;
   height: 30px;
@@ -2671,18 +2635,15 @@ body{
   justify-content: center;
   padding: 0;
 }
-
 .zoom-button:hover {
   background: rgba(255, 255, 255, 0.1);
 }
-
 .zoom-slider-container {
   height: 150px;
   margin: 10px 0;
   display: flex;
   align-items: center;
 }
-
 .zoom-slider {
   height: 100%;
   width: 4px;
@@ -2692,11 +2653,9 @@ body{
 .zoom-slider .noUi-connects {
   background-color: rgba(255, 255, 255, 0.3);
 }
-
 .zoom-slider .noUi-connect {
   background-color: white;
 }
-
 .zoom-slider .noUi-handle {
   width: 18px;
   height: 18px;
@@ -2706,13 +2665,10 @@ body{
   border: none;
   right: -7px;
 }
-
 .zoom-slider .noUi-handle:before,
 .zoom-slider .noUi-handle:after {
   display: none;
 }
-
-
 .date-mode-buttons{
   margin-top: 20px;
 }
@@ -2725,15 +2681,13 @@ body{
   padding: 8px 16px;
   cursor: pointer;
 }
-
 .date-slider-container.disabled .date-mode-buttons button{
   opacity: 0.8;
 }
-
 #app .date-slider-container .date-mode-buttons button.active{
   color: black !important;
   background-color: white;
-} 
+}
 .noUi-target{
   background-color: transparent;
 }
@@ -2745,23 +2699,18 @@ body{
 .noUi-horizontal .noUi-handle::after, .noUi-horizontal .noUi-handle::before{
   display: none;
 }
-
-
-
 .filters-toggle:last-child{
   border-color: white !important;
 }
-
-
 .filter-label {
   cursor: pointer;
-  user-select: none;
+  -webkit-user-select: none;
+     -moz-user-select: none;
+          user-select: none;
 }
-
 .filter-label:hover {
   opacity: 0.8;
 }
-
 .feature-image{
   max-height: 300px;
   margin-bottom: 10px;
@@ -2774,45 +2723,22 @@ body{
 .tag-label + ul, .tag-label + div{
   margin-top: 5px;
 }
-
-
-
-
-
-
-
-
 .date-slider-container {
-  position: absolute;
-  bottom: 10px;
-  left: 10px;
-  z-index: 15;  
-  background-color: rgba(0,0,0,0.6) !important;
-  padding: 10px;
+  background-color: rgba(0, 0, 0, 0.6);
+  padding: 15px;
   border-radius: 4px;
-  min-width: 350px;
-  min-height: 100px;
-  width: calc(100vw - 111px);
+  width: calc(100% - 30px);
 }
- 
-
 .histogram-scroll-container {
   display: flex;
   flex-direction: column;
+  width: -moz-max-content;
   width: max-content;
   margin: 0 auto;
-}
-
-.histogram-wrapper {
-  overflow-x: auto;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */ 
-}
+} 
 .histogram-wrapper::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
- 
-
 .histogram-container {
   position: relative;
   height: 150px;
@@ -2822,9 +2748,6 @@ body{
   border-bottom: 1px solid #fff;
   cursor: pointer;
 }
- 
-
-
 .histogram-bar {
   background-color: white;
   cursor: pointer;
@@ -2837,30 +2760,23 @@ body{
   position: relative;
   z-index: 2;
 }
-
 .year-labels {
   display: flex;
 }
-
 .year-label {
   flex: 1 0 auto;
   min-width: 84px;
   text-align: center;
   cursor: pointer;
 }
-
-
-
 .year-label:hover,
 .year-label.active {
   opacity: 1;
 }
-
 .histogram-wrapper.inactive {
   opacity: 0.3;
   pointer-events: none;
 }
-
 .build-graph-overlay {
   position: absolute;
   top: 0;
@@ -2873,7 +2789,6 @@ body{
   z-index: 1;
   pointer-events: all;
 }
-
 .build-graph-button {
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid white;
@@ -2884,24 +2799,16 @@ body{
   font-size: 14px;
   transition: all 0.3s ease;
 }
-
 .build-graph-button:hover {
   background: white;
 }
- 
- 
-
- 
-
 .histogram-bar:hover {
   opacity: 0.8;
 }
-
 .year-labels {
   display: flex;
   margin-top: 5px;
 }
- 
 .year-label button {
   background: transparent;
   border: none;
@@ -2911,25 +2818,36 @@ body{
   transition: opacity 0.2s;
   width: 100%;
 }
-
 .year-label.active button,
 .year-label button:hover {
   opacity: 1;
 }
-
-  
 .date-controls-container {
-  position: relative;
-  width: 100%;
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 15;
 }
-
 .control-buttons-row {
   display: flex;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 15px;
   align-items: center;
+  position: relative;
 }
-
+.stats-group {
+  margin-left: auto;
+}
+.date-stats {
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.feature-counter {
+  opacity: 0.7;
+  font-size: 0.9em;
+}
 .control-button {
   padding: 4px 8px;
   border: 1px solid #ccc;
@@ -2937,7 +2855,6 @@ body{
   background: white;
   cursor: pointer;
 }
-
 .control-button.active {
   background: #007bff;
   color: white;
@@ -2952,20 +2869,17 @@ body{
   z-index: 20;
   transform: translate(-50%, -100%);
 }
-
 .range-selection-overlay {
   position: absolute;
   height: 100%;
-  background: rgba(0, 123, 255, 0.2);
+  background: rgba(237, 6, 0, 0.3);
   pointer-events: none;
   z-index: 1;
   transition: left 0.3s ease, width 0.3s ease;
 }
-
 .active.histogram-bar:not(.in-range) {
   opacity: 0.5 !important;
 }
-
 .range-controls, .playback-controls, .speed-controls {
   display: flex;
   gap: 8px;
@@ -2980,12 +2894,9 @@ body{
   background-color: white;
   color: black !important;
 }
- 
 .range-selection-overlay:active {
   cursor: grabbing;
 }
-
-
 .control-buttons-row{
   position: fixed;
   bottom: 10px;
@@ -3007,8 +2918,6 @@ body{
   background-color: rgba(255, 255, 255, 0.9) !important;
   color: black !important;
 }
-
-
 .filter-checkbox {
   display: flex;
   align-items: center;
@@ -3024,18 +2933,134 @@ body{
 
 
 
+/* Main container */
+.date-controls-container {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 15;
+}
+
+/* Slider container */
+.date-slider-container {
+  background-color: rgba(0, 0, 0, 0.6);
+  padding: 0;
+  border-radius: 4px;
+  width: calc(100vw - 111px);
+  height: 100%;
+  display: inline-block;
+}
+
+/* Control buttons row */
+.control-buttons-row {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  margin-bottom: 15px;
+  width: calc(100vw - 111px);
+  max-width: 100%;
+}
+
+/* Controls grouping */
+.controls-group {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.stats-group {
+  margin-left: auto;
+}
+
+/* Filter checkbox styling */
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: white;
+  margin-right: 10px;
+}
+
+/* Range and playback controls */
+.range-controls,
+.playback-controls,
+.speed-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Control buttons */
+.control-button {
+  padding: 8px 12px;
+  background-color: rgba(0, 0, 0, 0.6);
+  border: 1px solid white;
+  border-radius: 4px;
+  cursor: pointer;
+  color: white;
+  text-align: center;
+}
+.control-button.active {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  color: black !important;
+}
+
+#app .control-buttons-row  .control-button.active{
+  color: black !important;
+}
 
 
+/* Stats styling */
+.date-stats {
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.feature-counter {
+  opacity: 0.7;
+  font-size: 0.9em;
+}
 
+/* Histogram container */
+.histogram-wrapper {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.date-slider-container > .histogram-wrapper{
+  
+  margin-bottom: 70px;
+  padding-top: 20px;
+}
+.histogram-wrapper::-webkit-scrollbar {
+  display: none;
+}
+.histogram-container {
+  position: relative;
+  height: 150px;
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 1px solid #fff;
+}
 
-
-
-
-
-
-
-
-
+/* Responsive styles */
+@media (max-width: 1100px) {
+.date-slider-container {
+    width: calc(100% - 40px);
+}
+}
+@media (max-width: 980px) {
+.control-buttons-row {
+    flex-wrap: wrap;
+}
+.stats-group {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 10px;
+}
+}
 @media (max-width: 1100px)  {
 #app .date-slider-container{
     right: auto !important;
@@ -3057,9 +3082,9 @@ body{
 .filters{
     height:calc(100vh - 333px);
 }
-  .modal-content{  
+.modal-content{  
   max-height: calc(100vh - 280px);
-  }
+}
 }
 @media (max-width: 980px) {
 .filters-toggle-container  .feature-count{
@@ -3104,4 +3129,6 @@ body{
 }
 
 
-</style>
+
+ 
+ </style>
