@@ -9,10 +9,15 @@
       <button class="zoom-button" @click="zoomOut">−</button>
     </div>
     <div class="filters-toggle-container" ref="filtersToggleContainer">
-      <div class="feature-count">
-        <img src="/custom-marker-hover.png" alt="Custom Marker" />
-        {{ displayedFeatureCount }}
+
+    <div class="feature-count">
+      <img src="/custom-marker-hover.png" alt="Custom Marker"> 
+      <div class="feature-counter">
+        <span>{{ displayedFeatureCount }}</span>
+        <span style="display: block;">пзк</span>
       </div>
+    </div>
+ 
       <input v-model="searchQuery" @input="handleSearch" @keyup.enter="handleSearchEnter" placeholder="Поиск по имени или статье" class="search-input" />
       <button class="filters-toggle" @click="setActiveFilter('names')" :class="{'active-panel': activeFilterCategory === 'names','active-filter': hasActiveNameFilters}">Имена</button>
       <button class="filters-toggle" @click="setActiveFilter('clauses')" :class="{'active-panel': activeFilterCategory === 'clauses','active-filter': hasActiveClauseFilters}">Статьи</button>
@@ -22,7 +27,7 @@
     <div class="date-controls-container">
       <div class="date-slider-container">
         <div class="control-buttons-row">
-          <button class="control-button" :class="{ active: isGraphMode }" @click="toggleGraphMode">Время</button>
+          <button class="control-button button-time" :class="{ active: isGraphMode }" @click="toggleGraphMode">Время</button>
           <div v-show="isGraphMode" class="controls-group">
             <div class="filter-checkbox">
               <input type="checkbox" checked disabled />
@@ -42,7 +47,7 @@
         <div v-if="isGraphMode" class="histogram-wrapper">
           <div class="histogram-scroll-container">
             <div class="histogram-container" @click="handleHistogramClick">
-              <div v-if="selectedRangeMonths !== totalMonths" class="range-selection-overlay" :style="rangeOverlayStyle" @mousedown="startRangeDrag"></div>
+              <div v-if="showRangeOverlay" class="range-selection-overlay" :style="rangeOverlayStyle" @mousedown="startRangeDrag"></div>
               <div v-for="month in monthlyData" :key="month.date" class="histogram-bar" :class="{ 'active': isMonthActive(month),'in-range': isInCurrentRange(month)}" :style="{height: (month.count / maxCount) * 100 + '%',opacity: getBarOpacity(month)}" @click="handleBarClick(month)" @mouseenter="showMonthTooltip($event, month)" @mouseleave="hideTooltip"></div>
             </div>
             <div class="year-labels">
@@ -154,7 +159,30 @@ export default {
       selectedFeature: null,
       clauses: [],
       names: [],
+      hasScrolled: false,
       tags: [
+        'дела гражданских активистов',
+        'дела журналистов',
+        'дела мусульман',
+        'дела о «шпионаже»',
+        'дела «украинских диверсантов»',
+        'дела о государственной измене',
+        'дело антифашистов',
+        'преследование адвокатов',
+        'преследование крымских татар',
+        'преследование свидетелей Иеговы',
+        'преследование сторонников Навального',
+        'преследование украинцев',
+        'преследования по религиозному признаку',
+        'принудительное лечение + карательная психиатрия',
+        'репрессии за антивоенную позицию',
+        '«экстремистские» высказывания + антиэкстремистское законодательство',
+        'ЛГБТ',
+        'Хизб ут-Тахрир',
+        'антитеррористическое законодательство',
+        'оправдание терроризма'
+      ],
+      predefinedTags: [
         'дела гражданских активистов',
         'дела журналистов',
         'дела мусульман',
@@ -208,7 +236,9 @@ export default {
       dateSliderEnabled: false,
       playbackSlider: null,
       allowedPlaybackValues: [-8, -4, -2, -1, 0, 1, 2, 4, 8],
-      lastNonZeroIndex: 5 // corresponds to allowedPlaybackValues[5] = 1x forward
+      lastNonZeroIndex: 5, // 1x forward by default
+      allRangeForwardInitialized: false, // track if we've initialized forward mode in all-range scenario
+      allRangeBackwardInitialized: false // track if we've initialized backward mode in all-range scenario
     }
   },
   computed: {
@@ -225,19 +255,96 @@ export default {
       return this.hasActiveClauseFilters || this.hasActiveTagFilters || this.hasActiveNameFilters || this.dateSliderEnabled
     },
     filteredNames() {
-      if (!this.searchQuery) return this.names
-      const q = this.searchQuery.toLowerCase()
-      return this.names.filter(n => n.toLowerCase().includes(q))
+      if (!this.geojsonData?.features) return []
+      let filtered = this.geojsonData.features
+      
+      // Filter by selected clauses
+      if (this.hasActiveClauseFilters) {
+        filtered = filtered.filter(f => 
+          f.properties.clauses?.some(c => this.selectedClauses.includes(c))
+        )
+      }
+      
+      // Filter by selected tags
+      if (this.hasActiveTagFilters) {
+        filtered = filtered.filter(f => 
+          f.properties.tags?.some(t => this.selectedTags.includes(t))
+        )
+      }
+      
+      // Get unique names from filtered features
+      const names = [...new Set(filtered.map(f => f.properties.name).filter(Boolean))]
+      
+      // Apply search query if exists
+      if (this.searchQuery) {
+        const q = this.searchQuery.toLowerCase()
+        return names.filter(n => n.toLowerCase().includes(q))
+      }
+      
+      return names.sort()
     },
+    
     filteredClauses() {
-      if (!this.searchQuery) return this.clauses
-      const q = this.searchQuery.toLowerCase()
-      return this.clauses.filter(c => c.toLowerCase().includes(q))
+      if (!this.geojsonData?.features) return []
+      let filtered = this.geojsonData.features
+      
+      // Filter by selected names
+      if (this.hasActiveNameFilters) {
+        filtered = filtered.filter(f => 
+          this.selectedNames.includes(f.properties.name)
+        )
+      }
+      
+      // Filter by selected tags
+      if (this.hasActiveTagFilters) {
+        filtered = filtered.filter(f => 
+          f.properties.tags?.some(t => this.selectedTags.includes(t))
+        )
+      }
+      
+      // Get unique clauses from filtered features
+      const clauses = [...new Set(filtered.flatMap(f => f.properties.clauses || []))]
+      
+      // Apply search query if exists
+      if (this.searchQuery) {
+        const q = this.searchQuery.toLowerCase()
+        return clauses.filter(c => c.toLowerCase().includes(q))
+      }
+      
+      return clauses.sort()
     },
+    
     filteredTags() {
-      if (!this.searchQuery) return this.tags
-      const q = this.searchQuery.toLowerCase()
-      return this.tags.filter(t => t.toLowerCase().includes(q))
+      if (!this.geojsonData?.features) return this.predefinedTags
+      let filtered = this.geojsonData.features
+      
+      // Filter by selected names
+      if (this.hasActiveNameFilters) {
+        filtered = filtered.filter(f => 
+          this.selectedNames.includes(f.properties.name)
+        )
+      }
+      
+      // Filter by selected clauses
+      if (this.hasActiveClauseFilters) {
+        filtered = filtered.filter(f => 
+          f.properties.clauses?.some(c => this.selectedClauses.includes(c))
+        )
+      }
+      
+      // Get available tags from filtered features
+      const availableTags = new Set(filtered.flatMap(f => f.properties.tags || []))
+      
+      // Filter predefined tags to show only those that are available in filtered features
+      let filteredTags = this.predefinedTags.filter(tag => availableTags.has(tag))
+      
+      // Apply search query if exists
+      if (this.searchQuery) {
+        const q = this.searchQuery.toLowerCase()
+        filteredTags = filteredTags.filter(t => t.toLowerCase().includes(q))
+      }
+      
+      return filteredTags
     },
     formattedStartDate() {
       return this.startDate ? this.startDate.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' }) : ''
@@ -247,6 +354,9 @@ export default {
     },
     canPlay() {
       return this.isGraphMode && this.monthlyData.length > 0
+    },
+    showRangeOverlay() {
+      return this.dateSliderEnabled
     },
     rangeOverlayStyle() {
       if (!this.startDate || !this.endDate) return { display: 'none' }
@@ -264,25 +374,22 @@ export default {
     }
   },
   watch: {
-    selectedClauses() {
-      this.applyFilters()
-    },
-    selectedTags() {
-      this.applyFilters()
-    },
-    selectedNames() {
-      this.applyFilters()
-    },
+    selectedClauses() { this.applyFilters() },
+    selectedTags() { this.applyFilters() },
+    selectedNames() { this.applyFilters() },
     startDate() {
-      this.updateSliderFromDates()
+      if (!this.isAllRangeSelected()) this.updateSliderFromDates()
     },
     endDate() {
-      this.updateSliderFromDates()
+      if (!this.isAllRangeSelected()) this.updateSliderFromDates()
     },
     isGraphMode(val) {
       this.dateSliderEnabled = val
       if (val) {
         this.$nextTick(() => { this.initializePlaybackSlider() })
+        this.$nextTick(() => {
+          this.scrollHistogramToEnd()
+        })
       } else {
         this.destroyPlaybackInterval()
       }
@@ -312,14 +419,24 @@ export default {
       const currentIndex = parseInt(this.playbackSlider.noUiSlider.get(), 10)
       const currentValue = this.allowedPlaybackValues[currentIndex]
       if (this.isPaused) {
-        // Resume from lastNonZeroIndex
-        this.playbackSlider.noUiSlider.set(this.lastNonZeroIndex)
+        // If paused and in all-range mode at full range and no movement done:
+        // start backwards at -1x by default
+        if (
+          this.isAllRangeSelected() &&
+          this.startDate.getTime() === this.minDate.getTime() &&
+          this.endDate.getTime() === this.maxDate.getTime() &&
+          !this.isPlaying && !this.isPlayingBackwards
+        ) {
+          const minusOneIndex = this.allowedPlaybackValues.indexOf(-1)
+          this.playbackSlider.noUiSlider.set(minusOneIndex)
+        } else {
+          // resume from lastNonZeroIndex
+          this.playbackSlider.noUiSlider.set(this.lastNonZeroIndex)
+        }
       } else {
-        // Pause and store lastNonZeroIndex if current is not 0
         if (currentValue !== 0) {
           this.lastNonZeroIndex = currentIndex
         }
-        // set to pause (0)
         const zeroIndex = this.allowedPlaybackValues.indexOf(0)
         this.playbackSlider.noUiSlider.set(zeroIndex)
       }
@@ -330,17 +447,69 @@ export default {
 mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZWk4ZXB1In0.24OWriNL8SBYXoLdBtO9EA'; // Replace with your Mapbox access token
    
 
-
       this.map = new mapboxgl.Map({
         container: this.$refs.mapContainer,
         style: 'mapbox://styles/mapbox/navigation-night-v1',
         center: [96.712933, 62.917018],
-        zoom: 5
+        zoom: 5,
+        renderWorldCopies: true  // Allow the map to repeat
       })
-      this.map.addControl(new MapboxLanguage({ defaultLanguage: 'ru' }))
+
+      // Disable rotation
+      this.map.dragRotate.disable()
+      this.map.touchZoomRotate.disableRotation()
+      
+      // Add language control
+      this.map.addControl(new MapboxLanguage({ 
+        defaultLanguage: 'ru'
+      }))
+      
+      let firstInteraction = true
+      
+      // Remove labels and borders after first interaction
+      const handleInteraction = () => {
+        if (firstInteraction) {
+          firstInteraction = false
+          const style = this.map.getStyle()
+          if (!style || !style.layers) return
+
+          style.layers.forEach(layer => {
+            if (
+              (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) ||
+              layer.id.includes('label') || 
+              layer.id.includes('boundary') ||
+              layer.id.includes('admin') ||
+              layer.id.includes('border')
+            ) {
+              if (this.map.getLayer(layer.id)) {
+                this.map.removeLayer(layer.id)
+              }
+            }
+          })
+        }
+      }
+      
+      // Listen for map movement events
+      this.map.on('movestart', handleInteraction)
+      
       this.map.on('load', () => {
         this.loadGeoJSONData()
         this.initializeZoomSlider()
+        
+        // Remove only borders initially, keep labels
+        const style = this.map.getStyle()
+        if (!style || !style.layers) return
+
+        style.layers.forEach(layer => {
+          if (layer.id.includes('boundary') ||
+              layer.id.includes('admin') ||
+              layer.id.includes('border')
+          ) {
+            if (this.map.getLayer(layer.id)) {
+              this.map.removeLayer(layer.id)
+            }
+          }
+        })
       })
     },
     async loadGeoJSONData() {
@@ -357,6 +526,9 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       this.processFeaturesByCoordinates()
       this.processDateData()
       this.addMarkers()
+      this.$nextTick(() => {
+        this.scrollHistogramToEnd()
+      })
     },
     processFeaturesByCoordinates() {
       if (!this.geojsonData) return
@@ -442,7 +614,26 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       this.maxCount = Math.max(...md.map(m => m.count), 1)
       const ys = [...new Set(md.map(m => m.year))]
       this.yearLabels = ys.map(y => ({ year: y, width: (md.filter(m => m.year === y).length / md.length) * 100 }))
-      this.$nextTick(() => { this.scrollHistogramToEnd() })
+    },
+    removeMapLabels() {
+      const style = this.map.getStyle()
+      
+      // Remove all text labels
+      style.layers = style.layers.map(layer => {
+        if (layer.type === 'symbol') {
+          return {
+            ...layer,
+            layout: {
+              ...layer.layout,
+              'text-field': '',
+              'text-size': 0
+            }
+          }
+        }
+        return layer
+      })
+      
+      this.map.setStyle(style)
     },
     applyFilters() {
       const filtered = this.getFilteredFeatures()
@@ -456,11 +647,7 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       }
       this.displayedFeatureCount = dateFiltered.length
       this.addMarkers(dateFiltered)
-      if (this.isGraphMode) {
-        this.updateMonthlyData(filtered)
-      } else {
-        this.updateMonthlyData(filtered)
-      }
+      this.updateMonthlyData(filtered)
     },
     getFilteredFeatures() {
       if (!this.geojsonData?.features) return []
@@ -526,6 +713,31 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       }
       this.applyFilters()
     },
+    handleMapScroll() {
+      if (!this.hasScrolled) {
+        this.hasScrolled = true
+        this.removeLabelsAndBorders()
+      }
+    },
+
+    removeLabelsAndBorders() {
+      const style = this.map.getStyle()
+      if (!style || !style.layers) return
+
+      style.layers.forEach(layer => {
+        if (
+          (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) ||
+          layer.id.includes('label') || 
+          layer.id.includes('boundary') ||
+          layer.id.includes('admin') ||
+          layer.id.includes('border')
+        ) {
+          if (this.map.getLayer(layer.id)) {
+            this.map.removeLayer(layer.id)
+          }
+        }
+      })
+    },
     resetFilters() {
       this.selectedClauses = []
       this.selectedTags = []
@@ -545,7 +757,12 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       if (this.dateRangeSlider && this.dateRangeSlider.noUiSlider) this.dateRangeSlider.noUiSlider.destroy()
       this.selectedRangeMonths = this.totalMonths
       this.$nextTick(() => { this.initializeDateRangeSlider() })
+      if (this.playbackSlider && this.playbackSlider.noUiSlider) {
+        const zeroIndex = this.allowedPlaybackValues.indexOf(0)
+        this.playbackSlider.noUiSlider.set(zeroIndex)
+      }
       this.applyFilters()
+      this.scrollHistogramToEnd()
     },
     toggleGraphMode() {
       this.stopAllPlayback()
@@ -556,13 +773,18 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
         this.startDate = this.minDate
         this.endDate = this.maxDate
         this.applyFilters()
+        this.scrollHistogramToEnd()
       } else {
         this.$nextTick(() => {
           this.selectedRangeMonths = this.totalMonths
           if (this.dateRangeSlider && this.dateRangeSlider.noUiSlider) this.dateRangeSlider.noUiSlider.set(this.totalMonths)
-          this.scrollHistogramToEnd()
           this.applyFilters()
+          this.scrollHistogramToEnd()
         })
+      }
+      if (this.playbackSlider && this.playbackSlider.noUiSlider) {
+        const zeroIndex = this.allowedPlaybackValues.indexOf(0)
+        this.playbackSlider.noUiSlider.set(zeroIndex)
       }
     },
     isMonthActive(m) {
@@ -585,6 +807,7 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
     },
     handleHistogramClick(e) {
       if (!this.dateSliderEnabled) return
+      this.stopAllPlayback()
       const c = e.currentTarget
       const r = c.getBoundingClientRect()
       const x = e.clientX - r.left
@@ -594,18 +817,22 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
     },
     handleBarClick(m) {
       if (!this.dateSliderEnabled) return
+      this.stopAllPlayback()
       const p = m.date.split('-')
       const y = parseInt(p[0], 10)
       const mo = parseInt(p[1], 10) - 1
       this.endDate = new Date(y, mo, new Date(y, mo + 1, 0).getDate())
       this.updateDateRangeFromMonths()
+      this.scrollToCurrentRange()
     },
     handleYearClick(y) {
       if (!this.dateSliderEnabled) return
+      this.stopAllPlayback()
       this.selectedRangeMonths = 12
       this.endDate = new Date(y, 11, 31)
       this.updateDateRangeFromMonths()
       if (this.dateRangeSlider && this.dateRangeSlider.noUiSlider) this.dateRangeSlider.noUiSlider.set(12)
+      this.scrollToCurrentRange()
     },
     showMonthTooltip(evt, m) {
       const bar = evt.target
@@ -634,14 +861,14 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       return 1
     },
     startRangeDrag(e) {
-      if (!this.dateSliderEnabled) return
+      if (!this.dateSliderEnabled || this.isAllRangeSelected()) return
       this.isDragging = true
       this.dragStartX = e.clientX
       document.addEventListener('mousemove', this.handleRangeDrag)
       document.addEventListener('mouseup', this.stopRangeDrag)
     },
     handleRangeDrag(evt) {
-      if (!this.isDragging || !this.dateSliderEnabled) return
+      if (!this.isDragging || !this.dateSliderEnabled || this.isAllRangeSelected()) return
       const dx = evt.clientX - this.dragStartX
       const cw = this.$el.querySelector('.histogram-container').offsetWidth
       const tm = this.monthlyData.length
@@ -661,7 +888,6 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
           this.startDate.setMonth(this.endDate.getMonth() - (months - 1))
         }
         this.applyFilters()
-        this.updateSliderFromDates()
         this.dragStartX = evt.clientX
       }
     },
@@ -669,12 +895,7 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       this.isDragging = false
       document.removeEventListener('mousemove', this.handleRangeDrag)
       document.removeEventListener('mouseup', this.stopRangeDrag)
-    },
-    scrollHistogramToEnd() {
-      this.$nextTick(() => {
-        const w = this.$el.querySelector('.histogram-wrapper')
-        if (w) w.scrollLeft = w.scrollWidth
-      })
+      this.scrollToCurrentRange()
     },
     scrollToCurrentRange() {
       if (!this.dateSliderEnabled) return
@@ -682,18 +903,63 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       const c = this.$el.querySelector('.histogram-wrapper')
       const sc = this.$el.querySelector('.histogram-scroll-container')
       if (!c || !sc) return
-      const sk = this.startDate.getFullYear() + '-' + String(this.startDate.getMonth() + 1).padStart(2, '0')
-      const idx = this.monthlyData.findIndex(m => m.date === sk)
+      // Scroll based on endDate for all-range modes (forward/backward)
+      const ek = this.endDate.getFullYear() + '-' + String(this.endDate.getMonth() + 1).padStart(2, '0')
+      const idx = this.monthlyData.findIndex(m => m.date === ek)
       if (idx === -1) return
       const tw = sc.scrollWidth
       const cw = c.offsetWidth
       const bw = tw / this.monthlyData.length
       const tp = (bw * idx) - (cw / 3)
-      c.scrollTo({ left: Math.max(0, tp), behavior: 'smooth' })
+      c.scrollTo({ left: Math.max(0, tp) })
+    },
+    scrollHistogramToEnd() {
+      this.$nextTick(() => {
+        const w = this.$el.querySelector('.histogram-wrapper')
+        if (w) w.scrollLeft = w.scrollWidth
+      })
+    },
+    isAllRangeSelected() {
+      return this.dateSliderEnabled && this.selectedRangeMonths === this.totalMonths
     },
     moveRange(step) {
       if (!this.dateSliderEnabled) return
       if (!this.startDate || !this.endDate) return
+
+      if (this.isAllRangeSelected() && this.isPlaying) {
+        const newEnd = new Date(this.endDate)
+        newEnd.setMonth(newEnd.getMonth() + step)
+        if (this.isPlayingBackwards) {
+          if (newEnd < this.minDate) {
+            this.endDate = new Date(this.minDate)
+            this.stopAllPlayback()
+          } else {
+            this.endDate = newEnd
+          }
+          this.startDate = new Date(this.minDate)
+        } else {
+          // Forward mode in all-range:
+          // If we haven't initialized forward yet and we are at full range, start from minDate-minDate
+          if (!this.allRangeForwardInitialized && this.endDate.getTime() === this.maxDate.getTime() && step > 0) {
+            this.endDate = new Date(this.minDate)
+            this.allRangeForwardInitialized = true
+            this.applyFilters()
+          } else {
+            if (newEnd > this.maxDate) {
+              this.endDate = new Date(this.maxDate)
+              this.stopAllPlayback()
+            } else {
+              this.endDate = newEnd
+            }
+            this.startDate = new Date(this.minDate)
+          }
+        }
+        this.applyFilters()
+        this.scrollToCurrentRange()
+        return
+      }
+
+      // Normal mode
       const m = this.selectedRangeMonths
       const ns = new Date(this.startDate)
       ns.setMonth(ns.getMonth() + step)
@@ -712,7 +978,6 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
         this.endDate = ne
       }
       this.applyFilters()
-      this.updateSliderFromDates()
       this.scrollToCurrentRange()
     },
     stopAllPlayback() {
@@ -727,7 +992,6 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       this.playbackInterval = null
     },
     setPlaybackSpeedAndDirectionIndex(idx) {
-      // idx is an integer 0-8
       const value = this.allowedPlaybackValues[idx]
       if (value === 0) {
         this.isPlaying = false
@@ -740,9 +1004,16 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
         if (value > 0) {
           this.isPlaying = true
           this.isPlayingBackwards = false
+          // If in all-range forward and at full range and not initialized forward:
+          if (this.isAllRangeSelected() && this.startDate.getTime() === this.minDate.getTime() && this.endDate.getTime() === this.maxDate.getTime() && !this.allRangeForwardInitialized) {
+            this.endDate = new Date(this.minDate) // start from no features
+            this.allRangeForwardInitialized = true
+            this.applyFilters()
+          }
         } else {
           this.isPlaying = true
           this.isPlayingBackwards = true
+          // Backwards works as previously
         }
         this.updatePlaybackInterval()
       }
@@ -770,31 +1041,12 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       const e = this.$refs.playbackSlider
       if (e.noUiSlider) e.noUiSlider.destroy()
 
-      // We'll map our allowed values to indices: 0..8
-      // allowedPlaybackValues: [-8,-4,-2,-1,0,1,2,4,8]
-      // indices:                0   1   2   3 4 5 6 7 8
-      // Default start at index of 0 value => index=4
-      const startIndex = this.allowedPlaybackValues.indexOf(0) // 0 speed -> pause
-      const format = {
-        to: (v) => {
-          const val = this.allowedPlaybackValues[v]
-          if (val === 0) return 'Pause'
-          return val + 'x'
-        },
-        from: () => {
-          // not used since we don't let user type values
-          return 4
-        }
-      }
-
+      const startIndex = this.allowedPlaybackValues.indexOf(0)
       noUiSlider.create(e, {
         start: [startIndex],
-        range: {
-          'min': 0,
-          'max': 8
-        },
+        range: { 'min': 0, 'max': 8 },
         step: 1,
-        tooltips: [format],
+        tooltips: false,
         pips: {
           mode: 'values',
           values: [0,1,2,3,4,5,6,7,8],
@@ -813,6 +1065,24 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       e.noUiSlider.on('update', (vals) => {
         const idx = parseInt(vals[0], 10)
         this.setPlaybackSpeedAndDirectionIndex(idx)
+      })
+
+      const pipEls = e.querySelectorAll('.noUi-value')
+      pipEls.forEach(p => {
+        p.style.cursor = 'pointer'
+        p.addEventListener('click', ev => {
+          const txt = ev.target.innerText
+          let targetVal = 0
+          if (txt === 'Pause') targetVal = 0
+          else {
+            let speedText = txt.replace('x', '')
+            let val = parseInt(speedText, 10)
+            targetVal = this.allowedPlaybackValues.indexOf(val)
+          }
+          if (targetVal !== -1) {
+            e.noUiSlider.set(targetVal)
+          }
+        })
       })
     },
     initializeDateRangeSlider() {
@@ -865,23 +1135,30 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
         tooltips: [format],
         pips: {
           mode: 'values',
-          values: [maxVal, 120, 60, 36, 24, 18, 12, 6, 3, 1],
+          values: [maxVal,120,60,36,24,18,12,6,3,1],
           format: format,
-          density: 4
+          density:4
         }
       })
       this.dateRangeSlider = el
       el.noUiSlider.on('update', (vals) => {
         const nrm = Math.round(parseFloat(vals[0]))
         if (this.selectedRangeMonths !== nrm) {
+          this.stopAllPlayback()
           this.selectedRangeMonths = nrm
           this.updateDateRangeFromMonths()
+          this.scrollToCurrentRange()
+          if (this.playbackSlider && this.playbackSlider.noUiSlider) {
+            const zeroIndex = this.allowedPlaybackValues.indexOf(0)
+            this.playbackSlider.noUiSlider.set(zeroIndex)
+          }
         }
       })
       const pipEls = el.querySelectorAll('.noUi-value')
       pipEls.forEach(p => {
         p.style.cursor = 'pointer'
         p.addEventListener('click', ev => {
+          this.stopAllPlayback()
           const txt = ev.target.innerText
           let val = maxVal
           if (txt.includes('10л')) val = 120
@@ -895,11 +1172,23 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
           else if (txt.includes('1м')) val = 1
           else if (txt.includes('2000 - 2024')) val = maxVal
           el.noUiSlider.set(val)
+          this.scrollToCurrentRange()
+          if (this.playbackSlider && this.playbackSlider.noUiSlider) {
+            const zeroIndex = this.allowedPlaybackValues.indexOf(0)
+            this.playbackSlider.noUiSlider.set(zeroIndex)
+          }
         })
       })
     },
     updateDateRangeFromMonths() {
       if (!this.dateSliderEnabled) {
+        this.startDate = new Date(this.minDate)
+        this.endDate = new Date(this.maxDate)
+        this.applyFilters()
+        return
+      }
+
+      if (this.isAllRangeSelected()) {
         this.startDate = new Date(this.minDate)
         this.endDate = new Date(this.maxDate)
         this.applyFilters()
@@ -935,7 +1224,7 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
       this.applyFilters()
     },
     updateSliderFromDates() {
-      if (!this.dateRangeSlider || !this.dateRangeSlider.noUiSlider) return
+      if (!this.dateRangeSlider || !this.dateRangeSlider.noUiSlider || this.isAllRangeSelected()) return
       const ms = ((this.endDate.getFullYear() - this.startDate.getFullYear()) * 12) + (this.endDate.getMonth() - this.startDate.getMonth()) + 1
       if (ms !== this.selectedRangeMonths) {
         this.selectedRangeMonths = ms
@@ -955,8 +1244,8 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
           paint: {
             'icon-opacity': [
               'case',
-              ['boolean', ['feature-state', 'hover'], false], 1,
-              0.7
+              ['boolean', ['feature-state', 'hover'], false], 0,
+              0.4
             ]
           }
         })
@@ -1047,7 +1336,7 @@ mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZ
   }
 }
 </script>
- 
+
 <style>
  
 .play-pause-controls {
@@ -1166,7 +1455,7 @@ body {
 .filters-toggle-container .feature-count {
   display: flex;
   align-items: center;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: black;
 
   border: 1px solid white;
   padding: 8px 12px;
@@ -1177,11 +1466,12 @@ body {
   position: relative;
   right: auto;
   top: auto;
+  cursor: help;
 }
 .filters-toggle-container .feature-count img {
   width: 30px;
   margin-right: 8px;
-  margin-bottom: 5px;
+  margin-bottom: 0;
 }
 .filters-toggle-container .filters-toggle {
   padding: 8px 12px;
@@ -1533,16 +1823,15 @@ body{
 }
 .zoom-controls {
   position: absolute;
-  bottom: 10px;
+  top: 10px;
   right: 10px;
   z-index: 15;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   background: rgba(0, 0, 0, 0.6);
   padding: 10px;
   border-radius: 4px;
-  display: none;
 }
 .zoom-button {
   width: 30px;
@@ -1556,6 +1845,11 @@ body{
   align-items: center;
   justify-content: center;
   padding: 0;
+  cursor: zoom-in;
+}
+
+.zoom-button:last-child{
+  cursor: zoom-out;
 }
 .zoom-button:hover {
   background: rgba(255, 255, 255, 0.1);
@@ -1760,10 +2054,6 @@ body{
 .stats-group {
   margin-left: auto;
 }
-.feature-counter {
-  opacity: 0.7;
-  font-size: 0.9em;
-}
 .control-button {
   padding: 4px 8px;
   border: 1px solid #ccc;
@@ -1840,7 +2130,7 @@ body{
   color: white;
   margin-right: 10px;
   pointer-events: none;
-  opacity: 0.8;
+  opacity: 0.5;
 }
 
 
@@ -1935,8 +2225,11 @@ body{
   padding-top: 10px;
 }
 .feature-counter {
-  opacity: 0.7;
-  font-size: 0.9em;
+  opacity: 1;
+  font-size: 18px;
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: bold;
 }
 
 /* Histogram container */
@@ -1947,7 +2240,7 @@ body{
 }
 .date-slider-container > .histogram-wrapper{
   
-  margin-bottom: 70px;
+  margin-bottom: 75px;
   padding-top: 20px;
 }
 .histogram-wrapper::-webkit-scrollbar {
@@ -2005,6 +2298,8 @@ body{
   gap: 15px;
   align-items: center;
   flex-wrap: nowrap;
+  width: 90%;
+  justify-content: space-between;
 }
 
 
@@ -2081,7 +2376,12 @@ body{
 .control-button.active {
   background: #ddd;
 }
-
+.button-time{
+  padding: 8px 12px;
+  background-color: rgba(255, 255, 255, 1);
+  border: 1px solid white;
+  border-radius: 4px;
+}
 /* Filters, inputs and other UI elements */
 .filters-toggle-container, .filters, .date-stats, .feature-count, .search-input {
   /* Add your preferred styling */
@@ -2123,8 +2423,11 @@ body{
   margin: 0 6px;
   display: flex;
   align-items: center;
+  cursor: pointer;
 }
-
+.zoom-slider-container .noUi-touch-area{
+  cursor: pointer;
+}
 /* Additional refinements as needed */
 
 
@@ -2263,6 +2566,14 @@ body{
  
 
 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
  
  
  
