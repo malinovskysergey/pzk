@@ -1,441 +1,135 @@
 <template>
   <div id="app">
-    <!-- Map Container -->
     <div ref="mapContainer" class="map-container"></div>
-
-
-      <!-- Zoom Controls -->
-      <div class="zoom-controls">
+    <div class="zoom-controls">
       <button class="zoom-button" @click="zoomIn">+</button>
       <div class="zoom-slider-container">
         <div ref="zoomSlider" class="zoom-slider"></div>
       </div>
       <button class="zoom-button" @click="zoomOut">−</button>
     </div>
-
-
-    <!-- Top-Left Filter Controls -->
     <div class="filters-toggle-container" ref="filtersToggleContainer">
-      <!-- Feature Count -->
       <div class="feature-count">
         <img src="/custom-marker-hover.png" alt="Custom Marker" />
         {{ displayedFeatureCount }}
       </div>
-      <!-- Search input -->
-      <input
-        v-model="searchQuery"
-        @input="handleSearch"
-        @keyup.enter="handleSearchEnter"
-        placeholder="Поиск по имени или статье"
-        class="search-input"
-      />
-
-      <!-- Filter buttons -->
-      <button
-        class="filters-toggle"
-        @click="setActiveFilter('names')"
-        :class="{
-          'active-panel': activeFilterCategory === 'names',
-          'active-filter': hasActiveNameFilters
-        }"
-      >
-        Имена
-      </button>
-
-      <button
-        class="filters-toggle"
-        @click="setActiveFilter('clauses')"
-        :class="{
-          'active-panel': activeFilterCategory === 'clauses',
-          'active-filter': hasActiveClauseFilters
-        }"
-      >
-        Статьи
-      </button>
-
-      <button
-        class="filters-toggle"
-        @click="setActiveFilter('tags')"
-        :class="{
-          'active-panel': activeFilterCategory === 'tags',
-          'active-filter': hasActiveTagFilters
-        }"
-      >
-        Дела
-      </button>
-
-      <button 
-        class="filters-toggle" 
-        @click="resetFilters"
-        :class="{
-          'active-filter': hasAnyActiveFilters
-        }"
-      >
-        Сбросить
-      </button>
+      <input v-model="searchQuery" @input="handleSearch" @keyup.enter="handleSearchEnter" placeholder="Поиск по имени или статье" class="search-input" />
+      <button class="filters-toggle" @click="setActiveFilter('names')" :class="{'active-panel': activeFilterCategory === 'names','active-filter': hasActiveNameFilters}">Имена</button>
+      <button class="filters-toggle" @click="setActiveFilter('clauses')" :class="{'active-panel': activeFilterCategory === 'clauses','active-filter': hasActiveClauseFilters}">Статьи</button>
+      <button class="filters-toggle" @click="setActiveFilter('tags')" :class="{'active-panel': activeFilterCategory === 'tags','active-filter': hasActiveTagFilters}">Дела</button>
+      <button class="filters-toggle" @click="resetFilters" :class="{'active-filter': hasAnyActiveFilters}">Сбросить</button>
     </div>
-<!-- Date Controls Container -->
-<div class="date-controls-container">
-    <!-- Combined container for all controls -->
-    <div class="date-slider-container">
-      <!-- Control buttons row - now inside date-slider-container -->
-      <div class="control-buttons-row">
-        <!-- Group 1: Graph Toggle -->
-        <button class="control-button" :class="{ active: isGraphMode }" @click="toggleGraphMode">
-          Графики
-        </button>
-
-        <!-- Group 2: Only show when graph mode is active -->
-        <template v-if="isGraphMode">
-          <div class="controls-group">
-            <!-- Checkbox -->
+    <div class="date-controls-container">
+      <div class="date-slider-container">
+        <div class="control-buttons-row">
+          <button class="control-button" :class="{ active: isGraphMode }" @click="toggleGraphMode">Время</button>
+          <div v-show="isGraphMode" class="controls-group">
             <div class="filter-checkbox">
               <input type="checkbox" checked disabled />
               <span>Есть данные</span>
             </div>
-
-            <!-- Range Controls -->
-            <div class="range-controls">
-              <button 
-                v-for="range in ranges" 
-                :key="range.value"
-                :class="['control-button', { active: selectedRange === range.value }]"
-                @click="setRange(range.value)"
-              >
-                {{ range.label }}
-              </button>
+            <div class="date-range-slider-container">
+              <div ref="dateRangeSlider" class="date-range-slider"></div>
             </div>
-
-            <!-- Playback Controls -->
-            <div class="playback-controls" v-if="selectedRange !== 'all'">
-              <button 
-                :class="['control-button', { active: isPlayingBackwards }]"
-                @click="toggleBackwardsPlay"
-                :disabled="!canPlay"
-              >
-                <span v-if="isPlayingBackwards">П</span>
-                <span v-else :style="{ transform: 'rotate(180deg)', display: 'inline-block' }">▶</span>
-              </button>
-              <button 
-                :class="['control-button', { active: isPlaying }]"
-                @click="togglePlayback"
-                :disabled="!canPlay"
-              >
-                {{ isPlaying ? 'П' : '▶' }}
-              </button>
-            </div>
-               <!-- Speed Controls - Only visible during playback -->
-            <div class="speed-controls" v-if="isPlaying || isPlayingBackwards">
-              <button 
-                v-for="speed in speeds" 
-                :key="speed.value"
-                :class="['control-button', { active: playbackSpeed === speed.value }]"
-                @click="setPlaybackSpeed(speed.value)"
-              >
-                {{ speed.label }}
-              </button>
+            <div class="playback-slider-container">
+              <div ref="playbackSlider" class="playback-slider"></div>
             </div>
           </div>
-
-          <!-- Group 3: Stats -->
-          <div class="stats-group">
-            <div class="date-stats">
-              {{ formattedStartDate }} - {{ formattedEndDate }}
-              <span class="">  -  {{ displayedFeatureCount }}</span>
+        </div>
+        <div v-if="isGraphMode" class="stats-group">
+          <div class="date-stats">{{ formattedStartDate }} - {{ formattedEndDate }}</div>
+        </div>
+        <div v-if="isGraphMode" class="histogram-wrapper">
+          <div class="histogram-scroll-container">
+            <div class="histogram-container" @click="handleHistogramClick">
+              <div v-if="selectedRangeMonths !== totalMonths" class="range-selection-overlay" :style="rangeOverlayStyle" @mousedown="startRangeDrag"></div>
+              <div v-for="month in monthlyData" :key="month.date" class="histogram-bar" :class="{ 'active': isMonthActive(month),'in-range': isInCurrentRange(month)}" :style="{height: (month.count / maxCount) * 100 + '%',opacity: getBarOpacity(month)}" @click="handleBarClick(month)" @mouseenter="showMonthTooltip($event, month)" @mouseleave="hideTooltip"></div>
+            </div>
+            <div class="year-labels">
+              <div v-for="yearLabel in yearLabels" :key="yearLabel.year" class="year-label active" :class="{ 'highlighted': isYearInRange(yearLabel.year) }" @click="handleYearClick(yearLabel.year)" @mouseenter="showYearTooltip($event, yearLabel)" @mouseleave="hideTooltip">{{ yearLabel.year }}</div>
             </div>
           </div>
-        </template>
-      </div>
-
-      <!-- Histogram section -->
-      <div v-if="isGraphMode" class="histogram-wrapper">
-        <div class="histogram-scroll-container">
-          <div class="histogram-wrapper">
-        <div class="histogram-scroll-container">
-          <div class="histogram-container"  @click="handleHistogramClick">
-            <div 
-              v-if="showRangeOverlay && selectedRange !== 'all'"
-              class="range-selection-overlay"
-              :style="rangeOverlayStyle"
-              @mousedown="startRangeDrag"
-            ></div>
-
-            <div 
-              v-for="month in monthlyData" 
-              :key="month.date"
-              class="histogram-bar"
-              :class="{ 
-                'active': isMonthActive(month),
-                'in-range': isInCurrentRange(month)
-              }"
-              :style="{ 
-                height: `${(month.count / maxCount) * 100}%`,
-                opacity: getBarOpacity(month)
-              }"
-              @click="handleBarClick(month)"
-              @mouseenter="showMonthTooltip($event, month)"
-              @mouseleave="hideTooltip"
-            ></div>
+          <div v-if="tooltipData" class="histogram-tooltip" :style="tooltipStyle">
+            <div>{{ tooltipData.label }}</div>
+            <div>Количество: {{ tooltipData.count }}</div>
           </div>
-
-          <div class="year-labels">
-            <div 
-              v-for="yearLabel in yearLabels" 
-              :key="yearLabel.year"
-              :class="['year-label', 'active', { 
-                'highlighted': isYearInRange(yearLabel.year)
-              }]"
-              @click="handleYearClick(yearLabel.year)"
-              @mouseenter="showYearTooltip($event, yearLabel)"
-              @mouseleave="hideTooltip"
-            >
-              {{ yearLabel.year }}
-            </div>
-          </div>
-          
-
-
         </div>
       </div>
-
-      <div 
-    v-if="tooltipData"
-    class="histogram-tooltip"
-    :style="tooltipStyle"
-  >
-    <div>{{ tooltipData.label }}</div>
-    <div>Количество: {{ tooltipData.count }}</div>
-  </div>
-
-        </div>
-      </div>
-
- 
-
-
-
-
     </div>
-  </div>
-
-
-    <!-- Names Filter -->
-<div v-if="activeFilterCategory === 'names'">
-  <div v-if="filteredNames.length === 0" class="no-results">
-    Ничего не найдено
-  </div>
-  <div v-else v-for="name in filteredNames" :key="name" class="filter-div">
-    <input 
-      type="checkbox" 
-      :value="name" 
-      v-model="selectedNames" 
-      :id="'name-' + name"
-    />
-    <span 
-      class="filter-label" 
-      @click="toggleFilter('names', name)"
-    >
-      {{ name }}
-    </span>
-  </div>
-</div>
-
-<!-- Clauses Filter -->
-<div v-if="activeFilterCategory === 'clauses'">
-  <div v-if="filteredClauses.length === 0" class="no-results">
-    Ничего не найдено
-  </div>
-  <div v-else v-for="clause in filteredClauses" :key="clause" class="filter-div">
-    <input 
-      type="checkbox" 
-      :value="clause" 
-      v-model="selectedClauses"
-      :id="'clause-' + clause"
-    />
-    <span 
-      class="filter-label" 
-      @click="toggleFilter('clauses', clause)"
-    >
-      {{ clause }}
-    </span>
-  </div>
-</div>
-
-<!-- Tags Filter -->
-<div v-if="activeFilterCategory === 'tags'">
-  <div v-if="filteredTags.length === 0" class="no-results">
-    Ничего не найдено
-  </div>
-  <div v-else v-for="tag in filteredTags" :key="tag" class="filter-div">
-    <input 
-      type="checkbox" 
-      :value="tag" 
-      v-model="selectedTags"
-      :id="'tag-' + tag"
-    />
-    <span 
-      class="filter-label" 
-      @click="toggleFilter('tags', tag)"
-    >
-      {{ tag }}
-    </span>
-  </div>
-</div>
-
-    <!-- Filters Panel -->
+    <div v-if="activeFilterCategory === 'names'">
+      <div v-if="filteredNames.length === 0" class="no-results">Ничего не найдено</div>
+      <div v-else v-for="name in filteredNames" :key="name" class="filter-div">
+        <input type="checkbox" :value="name" v-model="selectedNames" :id="'name-' + name" />
+        <span class="filter-label" @click="toggleFilter('names', name)">{{ name }}</span>
+      </div>
+    </div>
+    <div v-if="activeFilterCategory === 'clauses'">
+      <div v-if="filteredClauses.length === 0" class="no-results">Ничего не найдено</div>
+      <div v-else v-for="clause in filteredClauses" :key="clause" class="filter-div">
+        <input type="checkbox" :value="clause" v-model="selectedClauses" :id="'clause-' + clause" />
+        <span class="filter-label" @click="toggleFilter('clauses', clause)">{{ clause }}</span>
+      </div>
+    </div>
+    <div v-if="activeFilterCategory === 'tags'">
+      <div v-if="filteredTags.length === 0" class="no-results">Ничего не найдено</div>
+      <div v-else v-for="tag in filteredTags" :key="tag" class="filter-div">
+        <input type="checkbox" :value="tag" v-model="selectedTags" :id="'tag-' + tag" />
+        <span class="filter-label" @click="toggleFilter('tags', tag)">{{ tag }}</span>
+      </div>
+    </div>
     <div class="filters" v-show="filtersVisible" ref="filtersPanel">
-     
-      <!-- Names Filter -->
-        <div v-if="activeFilterCategory === 'names'">
-          <div v-if="filteredNames.length === 0" class="no-results">
-            Ничего не найдено
-          </div>
-          <div v-else v-for="name in filteredNames" :key="name" class="filter-div">
-            <input 
-              type="checkbox" 
-              :value="name" 
-              v-model="selectedNames" 
-              :id="'name-' + name"
-            />
-            <span 
-              class="filter-label" 
-              @click="toggleFilter('names', name)"
-            >
-              {{ name }}
-            </span>
-          </div>
+      <div v-if="activeFilterCategory === 'names'">
+        <div v-if="filteredNames.length === 0" class="no-results">Ничего не найдено</div>
+        <div v-else v-for="name in filteredNames" :key="name" class="filter-div">
+          <input type="checkbox" :value="name" v-model="selectedNames" :id="'name-' + name" />
+          <span class="filter-label" @click="toggleFilter('names', name)">{{ name }}</span>
         </div>
-
-        <!-- Clauses Filter -->
-        <div v-if="activeFilterCategory === 'clauses'">
-          <div v-if="filteredClauses.length === 0" class="no-results">
-            Ничего не найдено
-          </div>
-          <div v-else v-for="clause in filteredClauses" :key="clause" class="filter-div">
-            <input 
-              type="checkbox" 
-              :value="clause" 
-              v-model="selectedClauses"
-              :id="'clause-' + clause"
-            />
-            <span 
-              class="filter-label" 
-              @click="toggleFilter('clauses', clause)"
-            >
-              {{ clause }}
-            </span>
-          </div>
+      </div>
+      <div v-if="activeFilterCategory === 'clauses'">
+        <div v-if="filteredClauses.length === 0" class="no-results">Ничего не найдено</div>
+        <div v-else v-for="clause in filteredClauses" :key="clause" class="filter-div">
+          <input type="checkbox" :value="clause" v-model="selectedClauses" :id="'clause-' + clause" />
+          <span class="filter-label" @click="toggleFilter('clauses', clause)">{{ clause }}</span>
         </div>
-
-        <!-- Tags Filter -->
-        <div v-if="activeFilterCategory === 'tags'">
-          <div v-if="filteredTags.length === 0" class="no-results">
-            Ничего не найдено
-          </div>
-          <div v-else v-for="tag in filteredTags" :key="tag" class="filter-div">
-            <input 
-              type="checkbox" 
-              :value="tag" 
-              v-model="selectedTags"
-              :id="'tag-' + tag"
-            />
-            <span 
-              class="filter-label" 
-              @click="toggleFilter('tags', tag)"
-            >
-              {{ tag }}
-            </span>
-          </div>
+      </div>
+      <div v-if="activeFilterCategory === 'tags'">
+        <div v-if="filteredTags.length === 0" class="no-results">Ничего не найдено</div>
+        <div v-else v-for="tag in filteredTags" :key="tag" class="filter-div">
+          <input type="checkbox" :value="tag" v-model="selectedTags" :id="'tag-' + tag" />
+          <span class="filter-label" @click="toggleFilter('tags', tag)">{{ tag }}</span>
         </div>
-      
+      </div>
     </div>
-
-    <!-- Modal -->
     <div v-if="showModal" class="modal" @click="closeModal">
       <div class="modal-content" @click.stop>
         <span class="close-button" @click="closeModal">&times;</span>
-
-        <!-- Feature Details View -->
         <div v-if="selectedFeature">
           <button @click="backToList">Обратно к списку</button>
-
           <div class="main-info" v-if="selectedFeature.properties.imageFilename">
-            
             <h3>{{ selectedFeature.properties.name || 'Без названия' }}</h3>
-            <img
-              :src="getImageUrl(selectedFeature.properties.imageFilename)"
-              alt="Feature Image"
-              class="feature-image"
-            />
+            <img :src="getImageUrl(selectedFeature.properties.imageFilename)" alt="Feature Image" class="feature-image" />
           </div>
-
           <div v-if="selectedFeature.properties.linkink">
-            <a :href="selectedFeature.properties.linkink" target="_blank">
-              {{ selectedFeature.properties.linkink }}
-            </a>
+            <a :href="selectedFeature.properties.linkink" target="_blank">{{ selectedFeature.properties.linkink }}</a>
           </div>
-
-          <div v-if="selectedFeature.properties.main?.length">
-            <div
-              v-for="(content, index) in selectedFeature.properties.main"
-              :key="index"
-              v-html="content"
-            ></div>
-          </div>
-
+          <div v-for="(content, index) in selectedFeature.properties.main" :key="index" v-html="content"></div>
           <div v-if="selectedFeature.properties.address?.length">
             <span class="tag-label">Адрес для писем:</span>
-            <div
-              v-for="(addr, index) in selectedFeature.properties.address"
-              :key="index"
-              v-html="addr"
-            ></div>
+            <div v-for="(addr, index) in selectedFeature.properties.address" :key="index" v-html="addr"></div>
           </div>
-
           <div v-if="selectedFeature.properties.clauses?.length">
             <span class="tag-label">Статьи:</span>
             <ul>
-              <li 
-                v-for="clause in selectedFeature.properties.clauses" 
-                :key="clause"
-              >
-                {{ clause }}
-              </li>
+              <li v-for="clause in selectedFeature.properties.clauses" :key="clause">{{ clause }}</li>
             </ul>
           </div>
-<!-- 
-          <div v-if="selectedFeature.properties.tags?.length">
-            
-            <ul>
-              <li 
-                v-for="tag in selectedFeature.properties.tags" 
-                :key="tag"
-              >
-                {{ tag }}
-              </li>
-            </ul>
-          </div>
-
-          -->
-
           <div v-if="selectedFeature.properties.sourceUrl">
-            <a :href="selectedFeature.properties.sourceUrl" target="_blank">
-              Поддержка политзаключённых. Мемориал
-            </a>
+            <a :href="selectedFeature.properties.sourceUrl" target="_blank">Поддержка политзаключённых. Мемориал</a>
           </div>
         </div>
-
-        <!-- Feature List View -->
         <div v-else>
           <ul>
-            <li
-              v-for="feature in currentFeatures"
-              :key="feature.properties.name"
-              @click="showFeatureDetails(feature)"
-              class="feature-list-item"
-            >
-              {{ feature.properties.name || 'Без названия' }}
-            </li>
+            <li v-for="feature in currentFeatures" :key="feature.properties.name" @click="showFeatureDetails(feature)" class="feature-list-item">{{ feature.properties.name || 'Без названия' }}</li>
           </ul>
         </div>
       </div>
@@ -444,11 +138,10 @@
 </template>
 
 <script>
-import mapboxgl from 'mapbox-gl';
-import MapboxLanguage from '@mapbox/mapbox-gl-language';
-import noUiSlider from 'nouislider';
-import 'nouislider/dist/nouislider.css';
-import debounce from 'lodash/debounce';
+import mapboxgl from 'mapbox-gl'
+import MapboxLanguage from '@mapbox/mapbox-gl-language'
+import noUiSlider from 'nouislider'
+import 'nouislider/dist/nouislider.css'
 
 export default {
   name: 'App',
@@ -461,7 +154,6 @@ export default {
       selectedFeature: null,
       clauses: [],
       names: [],
-      searchQuery: '',
       tags: [
         'дела гражданских активистов',
         'дела журналистов',
@@ -482,7 +174,7 @@ export default {
         'ЛГБТ',
         'Хизб ут-Тахрир',
         'антитеррористическое законодательство',
-        'оправдание терроризма',
+        'оправдание терроризма'
       ],
       selectedClauses: [],
       selectedNames: [],
@@ -490,1705 +182,872 @@ export default {
       filtersVisible: false,
       activeFilterCategory: null,
       displayedFeatureCount: 0,
-      dateSlider: null,
-      previousCoordinates: new Set(), 
-      dateSliderEnabled: false,
-      currentDate:new Date(2024, 11, 31),
-      startDate: null,
-      endDate: null,
-      minDate:  new Date(2000, 0, 1),
-      maxDate: new Date(2024, 11, 31),
+      searchQuery: '',
+      isGraphMode: false,
       monthlyData: [],
       maxCount: 0,
+      yearLabels: [],
       selectedYear: null,
       selectedMonth: null,
-      yearLabels: [], 
-      isGraphMode: false,
-      ranges: [
-        { value: 'all', label: '2000 - 2024', months: -1 },
-        { value: 'month', label: '1 месяц', months: 1 },
-        { value: '3months', label: '3 месяца', months: 3 },
-        { value: '6months', label: '6 месяцев', months: 6 },
-        { value: 'year', label: '1 год', months: 12 }
-      ],
-      selectedRange: 'all',
-      speeds: [
-        { value: 0.5, label: '0.5x' },
-        { value: 1, label: '1x' },
-        { value: 2, label: '2x' },
-        { value: 4, label: '4x' }
-      ],
-      playbackSpeed: 1,
-      isPlaying: false,
-      isPlayingBackwards: false, 
-      playbackInterval: null,
-      showRangeOverlay: false,
-      isDragging: false,
-      dragStartX: null,
+      minDate: new Date(2000, 0, 1),
+      maxDate: new Date(2024, 11, 31),
+      startDate: null,
+      endDate: null,
+      totalMonths: null,
+      selectedRangeMonths: null,
+      dateRangeSlider: null,
       tooltipData: null,
       tooltipStyle: null,
-      playDirection: 'rtl'
-    };
-  }, 
-  computed: {
-    formattedCurrentDate() {
-    if (this.selectedYear) {
-      return `${this.selectedYear} г.`;
+      isDragging: false,
+      dragStartX: null,
+      isPlaying: false,
+      isPlayingBackwards: false,
+      isPaused: true,
+      playbackInterval: null,
+      playbackSpeed: 1,
+      dateSliderEnabled: false,
+      playbackSlider: null,
+      allowedPlaybackValues: [-8, -4, -2, -1, 0, 1, 2, 4, 8],
+      lastNonZeroIndex: 5 // corresponds to allowedPlaybackValues[5] = 1x forward
     }
-    return this.currentDate?.toLocaleDateString('ru-RU', { 
-      year: 'numeric', 
-      month: 'long' 
-    });
   },
-  formattedStartDate() {
-    return this.startDate ? this.startDate.toLocaleDateString('ru-RU', { 
-      year: 'numeric', 
-      month: 'long' 
-    }) : '';
-  },
-  formattedEndDate() {
-    return this.endDate ? this.endDate.toLocaleDateString('ru-RU', { 
-      year: 'numeric', 
-      month: 'long' 
-    }) : '';
-  },
-  histogramBarWidth() {
-    const totalMonths = this.monthlyData.length;
-    return totalMonths > 0 ? 100 / totalMonths : 0;
-  },
+  computed: {
     hasActiveClauseFilters() {
-      return this.selectedClauses.length > 0;
+      return this.selectedClauses.length > 0
     },
     hasActiveTagFilters() {
-      return this.selectedTags.length > 0;
+      return this.selectedTags.length > 0
     },
     hasActiveNameFilters() {
-      return this.selectedNames.length > 0;
+      return this.selectedNames.length > 0
     },
     hasAnyActiveFilters() {
-      return this.hasActiveClauseFilters || 
-             this.hasActiveTagFilters || 
-             this.hasActiveNameFilters || 
-             this.dateSliderEnabled;
+      return this.hasActiveClauseFilters || this.hasActiveTagFilters || this.hasActiveNameFilters || this.dateSliderEnabled
     },
     filteredNames() {
-      if (!this.searchQuery) return this.names;
-      const query = this.searchQuery.toLowerCase();
-      return this.names.filter(name => 
-        name.toLowerCase().includes(query)
-      );
+      if (!this.searchQuery) return this.names
+      const q = this.searchQuery.toLowerCase()
+      return this.names.filter(n => n.toLowerCase().includes(q))
     },
     filteredClauses() {
-      if (!this.searchQuery) return this.clauses;
-      const query = this.searchQuery.toLowerCase();
-      return this.clauses.filter(clause => 
-        clause.toLowerCase().includes(query)
-      );
+      if (!this.searchQuery) return this.clauses
+      const q = this.searchQuery.toLowerCase()
+      return this.clauses.filter(c => c.toLowerCase().includes(q))
     },
     filteredTags() {
-      if (!this.searchQuery) return this.tags;
-      const query = this.searchQuery.toLowerCase();
-      return this.tags.filter(tag => 
-        tag.toLowerCase().includes(query)
-      );
+      if (!this.searchQuery) return this.tags
+      const q = this.searchQuery.toLowerCase()
+      return this.tags.filter(t => t.toLowerCase().includes(q))
     },
-    baseFilteredFeatures() {
-    return this.geojsonData?.features.filter((feature) => {
-      // Apply only non-date filters
-      if (this.hasActiveNameFilters && 
-          !this.selectedNames.includes(feature.properties.name)) {
-        return false;
-      }
-
-      if (this.hasActiveClauseFilters && 
-          !feature.properties.clauses?.some(clause => 
-            this.selectedClauses.includes(clause))) {
-        return false;
-      }
-
-      if (this.hasActiveTagFilters && 
-          !feature.properties.tags?.some(tag => 
-            this.selectedTags.includes(tag))) {
-        return false;
-      }
-
-      return true;
-    }) || [];
-  },
-  hasAnyNonDateFilters() {
-    return this.hasActiveClauseFilters || 
-           this.hasActiveTagFilters || 
-           this.hasActiveNameFilters;
-  },
-  showDateMode() {
-    return this.displayedFeatureCount > 1;
-  },
-  
-  canUseDateMode() {
-    return this.showDateMode && this.baseFilteredFeatures.length > 1;
-  },
-  canPlay() {
-      return this.isGraphMode && this.monthlyData.length > 0;
+    formattedStartDate() {
+      return this.startDate ? this.startDate.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' }) : ''
+    },
+    formattedEndDate() {
+      return this.endDate ? this.endDate.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' }) : ''
+    },
+    canPlay() {
+      return this.isGraphMode && this.monthlyData.length > 0
     },
     rangeOverlayStyle() {
-    if (!this.showRangeOverlay || this.selectedRange === 'all' || !this.startDate || !this.endDate) {
-      return { display: 'none' };
+      if (!this.startDate || !this.endDate) return { display: 'none' }
+      const BAR_WIDTH = 3
+      const BAR_MARGIN = 4
+      const TOTAL_BAR_WIDTH = BAR_WIDTH + BAR_MARGIN
+      const sy = this.startDate.getFullYear()
+      const sm = this.startDate.getMonth()
+      const ey = this.endDate.getFullYear()
+      const em = this.endDate.getMonth()
+      const left = ((sy - 2000) * (TOTAL_BAR_WIDTH * 12)) + (sm * TOTAL_BAR_WIDTH)
+      const monthsDiff = ((ey - sy) * 12) + (em - sm) + 1
+      const width = monthsDiff * TOTAL_BAR_WIDTH
+      return { left: left + 'px', width: width + 'px' }
     }
-
-    // Constants based on CSS
-    const BAR_WIDTH = 3;
-    const BAR_MARGIN = 4; // 2px left + 2px right
-    const TOTAL_BAR_WIDTH = BAR_WIDTH + BAR_MARGIN; // 7px total
-    const YEAR_WIDTH = TOTAL_BAR_WIDTH * 12; // 84px per year
-
-    // Calculate position
-    const startYear = this.startDate.getFullYear();
-    const startMonth = this.startDate.getMonth();
-    const yearsSince2000 = startYear - 2000;
-
-    // Calculate left position
-    const leftPosition = (yearsSince2000 * YEAR_WIDTH) + (startMonth * TOTAL_BAR_WIDTH);
-
-    // Calculate width based on selected range
-    let width;
-    if (this.selectedRange === 'month') {
-      width = TOTAL_BAR_WIDTH;
-    } else {
-      const endYear = this.endDate.getFullYear();
-      const endMonth = this.endDate.getMonth();
-      const monthsDifference = ((endYear - startYear) * 12) + (endMonth - startMonth) + 1;
-      width = monthsDifference * TOTAL_BAR_WIDTH;
-    }
-
-    return {
-      left: `${leftPosition}px`,
-      width: `${width}px`
-    };
-  }
   },
   watch: {
-    selectedClauses: {
-      handler() {
-        if (this.dateMode === 'date') {
-          this.buildGraph();
-        }
-        this.applyFilters();
-      }
+    selectedClauses() {
+      this.applyFilters()
     },
-    selectedTags: {
-      handler() {
-        if (this.dateMode === 'date') {
-          this.buildGraph();
-        }
-        this.applyFilters();
-      }
+    selectedTags() {
+      this.applyFilters()
     },
-    selectedNames: {
-      handler() {
-        if (this.dateMode === 'date') {
-          this.buildGraph();
-        }
-        this.applyFilters();
-      }
-    },
-    displayedFeatureCount: {
-      handler(newCount) {
-        if (newCount <= 1 && this.dateMode === 'date') {
-          this.setDateMode('play');
-        }
-      }
-    } 
-  },
-  mounted() {
-  this.initializeMap();
-  document.addEventListener('click', this.handleClickOutside);
-
-  this.$nextTick(() => {
-        if (this.selectedRange !== 'all') {
-          this.showRangeOverlay = true;
-        }
-      });
-},
-
-beforeUnmount() {
-      this.stopAllPlayback();
-      document.removeEventListener('mousemove', this.handleRangeDrag);
-      document.removeEventListener('mouseup', this.stopRangeDrag);
-    },
-  methods: {
-
-
-    initializeMap() {
-
-      mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZWk4ZXB1In0.24OWriNL8SBYXoLdBtO9EA'; // Replace with your Mapbox access token
-   
-      
-         this.map = new mapboxgl.Map({
-        container: this.$refs.mapContainer,
-        style: 'mapbox://styles/mapbox/navigation-night-v1',
-        center: [96.712933,62.917018],
-        zoom: 5,
-      });
-
-      this.map.addControl(
-        new MapboxLanguage({
-          defaultLanguage: 'ru',
-        })
-      );
-
-      this.map.on('load', () => {
-        this.loadGeoJSONData();
-        this.initializeZoomSlider();
-      });
-      this.scrollHistogramToEnd();
-    },
-
-
-    processMonthlyData() {
-      const startYear = 2000;
-      const endYear = new Date().getFullYear();
-      const monthlyData = [];
-      
-      for (let year = startYear; year <= endYear; year++) {
-        for (let month = 0; month < 12; month++) {
-          const date = `${year}-${String(month + 1).padStart(2, '0')}`;
-          const existingData = this.monthlyData.find(m => m.date === date) || { count: 0 };
-          
-          monthlyData.push({
-            date,
-            count: existingData.count,
-            label: new Date(year, month).toLocaleDateString('ru-RU', {
-              year: 'numeric',
-              month: 'long'
-            })
-          });
-        }
-      }
-      
-      this.monthlyData = monthlyData;
-    },
-
-    // Update processDateData method with proper dates array
-    processDateData() {
-      if (!this.geojsonData?.features) return;
-
-// Collect features with valid dates
-const datedFeatures = this.geojsonData.features.filter(feature => {
-  const date = feature.properties.date ? new Date(feature.properties.date) : null;
-  return date && !isNaN(date.getTime());
-});
-
-if (datedFeatures.length === 0) return;
-
-// Set fixed date range
-this.minDate = new Date(2000, 0, 1);
-this.maxDate = new Date(2024, 11, 31);
-
-// Initialize startDate and endDate
-this.startDate = new Date(this.minDate);
-this.endDate = new Date(this.maxDate);
-  // Generate monthlyData
-  const monthCounts = {};
-  datedFeatures.forEach(feature => {
-    const date = new Date(feature.properties.date);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    monthCounts[key] = (monthCounts[key] || 0) + 1;
-  });
-
-  // Generate all months between minDate and maxDate
-  const monthlyData = [];
-  const startYear = this.minDate.getFullYear();
-  const startMonth = this.minDate.getMonth();
-  const endYear = this.maxDate.getFullYear();
-  const endMonth = this.maxDate.getMonth();
-
-  let currentYear = startYear;
-  let currentMonth = startMonth;
-
-  while (currentYear < endYear || (currentYear === endYear && currentMonth <= endMonth)) {
-    const key = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-    const count = monthCounts[key] || 0;
-    const date = new Date(currentYear, currentMonth);
-    const label = date.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' });
-
-    monthlyData.push({
-      date: key,
-      count,
-      label,
-      year: currentYear,
-      month: currentMonth
-    });
-
-    currentMonth++;
-    if (currentMonth > 11) {
-      currentMonth = 0;
-      currentYear++;
-    }
-  }
-
-  this.monthlyData = monthlyData;
-  this.maxCount = Math.max(...monthlyData.map(m => m.count), 1);
-  this.monthlyData = monthlyData;
-  this.maxCount = Math.max(...monthlyData.map(m => m.count), 1);
-  // Generate yearLabels
-  const years = [...new Set(monthlyData.map(m => m.year))];
-  this.yearLabels = years.map(year => {
-    const monthsInYear = monthlyData.filter(m => m.year === year).length;
-    const width = (monthsInYear / monthlyData.length) * 100;
-    return { year, width };
-  });
-
-  this.scrollHistogramToEnd();
-},
-
-
-
-getBarOpacity(month) {
-  if (this.selectedMonth) {
-    return this.selectedMonth === month.date ? 1 : 0.3;
-  } else if (this.selectedYear) {
-    return month.year === this.selectedYear ? 1 : 0.3;
-  } else {
-    return 1;
-  }
-},
-
-
-  // Update selectMonth method
-  selectMonth(dateKey) {
-    const [year, month] = dateKey.split('-').map(Number);
-    const selectedStartDate = new Date(year, month - 1, 1);
-    const selectedEndDate = new Date(year, month, 0); // Last day of the month
-
-    if (this.selectedMonth === dateKey) {
-      // Deselect month filter
-      this.selectedMonth = null;
-      this.startDate = new Date(this.minDate);
-      this.endDate = new Date(this.maxDate);
-    } else {
-      // Select month filter
-      this.selectedMonth = dateKey;
-      this.selectedYear = null;
-      this.startDate = selectedStartDate;
-      this.endDate = selectedEndDate;
-    }
-
-    this.applyFilters();
-  },
-
-  isMonthActive(month) {
-    if (this.selectedMonth) {
-      return this.selectedMonth === month.date;
-    } else if (this.selectedYear) {
-      return month.year === this.selectedYear;
-    } else {
-      return true;
-    }
-  },
-  isYearActive(year) {
-    return this.selectedYear === year;
-  },
-
-  // Update toggleYear method
-  toggleYear(year) {
-    if (this.selectedYear === year) {
-      // Deselect year filter
-      this.selectedYear = null;
-      this.startDate = new Date(this.minDate);
-      this.endDate = new Date(this.maxDate);
-    } else {
-      // Select year filter
-      this.selectedYear = year;
-      this.selectedMonth = null;
-      this.startDate = new Date(year, 0, 1);
-      this.endDate = new Date(year, 11, 31);
-    }
-
-    this.applyFilters();
-  },
-
-  getYearFeatureCount(year) {
-      return this.monthlyData
-        .filter(month => new Date(month.date).getFullYear() === year)
-        .reduce((sum, month) => sum + month.count, 0);
-    },
-
-    showMonthTooltip(event, data) {
-      const bar = event.target;
-      const rect = bar.getBoundingClientRect();
-      
-      this.tooltipStyle = {
-        left: `${rect.left + (rect.width / 2)}px`,
-        top: `${rect.top}px`
-      };
-      this.tooltipData = data;
-    },
-
-    showYearTooltip(event, yearLabel) {
-      const element = event.target;
-      const rect = element.getBoundingClientRect();
-      
-      // Only show tooltip if there are features in this year
-      const count = this.getYearFeatureCount(yearLabel.year);
-      if (count > 0) {
-        this.tooltipStyle = {
-          left: `${rect.left + (rect.width / 2)}px`,
-          top: `${rect.top}px`
-        };
-        
-        this.tooltipData = {
-          label: `${yearLabel.year} год`,
-          count
-        };
-      }
-    },
-
-    hideTooltip() {
-      this.tooltipData = null;
-    },
-
-    async loadGeoJSONData() {
-      try {
-        const response = await fetch('/main783Date_Geo.geojson');
-        this.geojsonData = await response.json(); 
-        
-        // Load images first
-        await Promise.all([
-          new Promise((resolve, reject) => {
-            this.map.loadImage('/custom-marker.png', (error, image) => {
-              if (error) reject(error);
-              if (!this.map.hasImage('custom-marker')) {
-                this.map.addImage('custom-marker', image);
-              }
-              resolve();
-            });
-          }),
-          new Promise((resolve, reject) => {
-            this.map.loadImage('/custom-marker-hover.png', (error, image) => {
-              if (error) reject(error);
-              if (!this.map.hasImage('custom-marker-hover')) {
-                this.map.addImage('custom-marker-hover', image);
-              }
-              resolve();
-            });
-          })
-        ]);
-
-        // Process features and dates
-        this.processFeaturesByCoordinates();
-        this.processDateData(); // Make sure this is called
-        this.initializeDateSlider();
-        this.addMarkers();
-      } catch (error) {
-        console.error('Error loading GeoJSON data:', error);
-      }
-    },
-    toggleGraphMode() {
-      this.stopAllPlayback();
-      this.isGraphMode = !this.isGraphMode;
-      if (this.isGraphMode) {
-        this.$nextTick(() => {
-          this.selectedRange = 'all';
-          this.setRange('all');
-          this.scrollHistogramToEnd();
-        });
-      } else {
-        this.selectedRange = 'all';
-        this.showRangeOverlay = false;
-        this.startDate = this.minDate;
-        this.endDate = this.maxDate;
-        this.applyFilters();
-      }
-    },
-    resetAllDateControls() {
-      this.stopPlayback();
-      this.showRangeOverlay = false;
-      this.selectedRange = 'month';
-      this.playbackSpeed = 1;
-      this.startDate = null;
-      this.endDate = null;
-      this.resetFilters();
-    },
-    initializeDefaultRange() {
-      // Find the latest date in the data
-      const dates = this.monthlyData.map(m => new Date(m.date));
-      const maxDate = new Date(Math.max(...dates));
-      this.setRangeFromDate(maxDate);
-    },
-
-    handleHistogramClick(event) {
-    if (this.selectedRange === 'all') return;
-    
-    const container = event.currentTarget;
-    const rect = container.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const barWidth = rect.width / this.monthlyData.length;
-    const clickedIndex = Math.floor(x / barWidth);
-    
-    if (clickedIndex >= 0 && clickedIndex < this.monthlyData.length) {
-      const clickedMonth = this.monthlyData[clickedIndex];
-      this.handleBarClick(clickedMonth);
-    }
-  },
-
-    setRange(range) {
-      const previousRange = this.selectedRange;
-      this.selectedRange = range;
-      this.stopAllPlayback();
-      
-      if (range === 'all') {
-        this.showRangeOverlay = false;
-        this.startDate = this.minDate;
-        this.endDate = this.maxDate;
-      } else {
-        // If switching from 'all' to a specific range, use the latest date
-        const endDate = previousRange === 'all' ? this.maxDate : (this.endDate || this.maxDate);
-        
-        // Calculate the new range immediately
-        const rangeMonths = this.ranges.find(r => r.value === range).months;
-        this.endDate = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 0); // End of month
-        this.startDate = new Date(endDate.getFullYear(), endDate.getMonth() - (rangeMonths - 1), 1); // Start of month
-        
-        this.showRangeOverlay = true;
-      }
-      
-      // Force a re-render of the overlay
-      this.$nextTick(() => {
-        this.applyDateFilter();
-      });
-    },
- 
-
-
-    stopAllPlayback() {
-      this.isPlaying = false;
-      this.isPlayingBackwards = false;
-      if (this.playbackInterval) {
-        clearInterval(this.playbackInterval);
-        this.playbackInterval = null;
-      }
-    },
-    handleYearClick(year) {
-      this.selectedRange = 'year';
-      const yearEnd = new Date(year, 11, 31);
-      this.setRangeFromDate(yearEnd);
-    },
-
-    isInCurrentRange(month) {
-      if (!this.startDate || !this.endDate || this.selectedRange === 'all') return true;
-      
-      const monthDate = new Date(month.date);
-      const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-      
-      // For month range, check exact month match
-      if (this.selectedRange === 'month') {
-        return monthStart.getFullYear() === this.startDate.getFullYear() && 
-               monthStart.getMonth() === this.startDate.getMonth();
-      }
-      
-      // For other ranges, check if within range
-      return monthStart >= this.startDate && monthStart <= this.endDate;
-    },
-
-    handleRangeDirection(date) {
-      const year = date.getFullYear();
-      const month = date.getMonth();
-      
-      if (year === 2000 && month === 0) {
-        this.playDirection = 'ltr';
-      } else if (year === 2024 && month === 11) {
-        this.playDirection = 'rtl';
-      }
-      
-      return this.playDirection;
-    },
-
-    setRangeFromDate(date) {
-      if (this.selectedRange === 'all') return;
-      
-      const direction = this.handleRangeDirection(date);
-      const rangeMonths = this.ranges.find(r => r.value === this.selectedRange).months;
-      
-      if (this.selectedRange === 'month') {
-        if (direction === 'ltr') {
-          this.startDate = new Date(date.getFullYear(), date.getMonth(), 1);
-          this.endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-        } else {
-          this.endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-          this.startDate = new Date(date.getFullYear(), date.getMonth(), 1);
-        }
-      } else {
-        if (direction === 'ltr') {
-          this.startDate = new Date(date.getFullYear(), date.getMonth(), 1);
-          this.endDate = new Date(date.getFullYear(), date.getMonth() + rangeMonths, 0);
-        } else {
-          this.endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-          this.startDate = new Date(date.getFullYear(), date.getMonth() - (rangeMonths - 1), 1);
-        }
-      }
-      
-      this.showRangeOverlay = true;
-      this.applyDateFilter();
-    },
-
-    scrollToCurrentRange() {
-    if (!this.startDate || !this.selectedRange === 'all') return;
-
-    const container = this.$el.querySelector('.histogram-wrapper');
-    const scrollContainer = this.$el.querySelector('.histogram-scroll-container');
-    if (!container || !scrollContainer) return;
-
-    // Find the index of the current range start
-    const currentIndex = this.monthlyData.findIndex(month => {
-      const monthDate = new Date(month.date);
-      return monthDate >= this.startDate;
-    });
-
-    if (currentIndex === -1) return;
-
-    // Calculate scroll position
-    const totalWidth = scrollContainer.scrollWidth;
-    const containerWidth = container.offsetWidth;
-    const barWidth = totalWidth / this.monthlyData.length;
-    const targetPosition = (barWidth * currentIndex) - (containerWidth / 3); // Show some context before
-
-    container.scrollTo({
-      left: Math.max(0, targetPosition),
-      behavior: 'smooth'
-    });
-  },
-
-  moveRange(step) {
-      if (!this.startDate || !this.endDate || this.selectedRange === 'all') return;
-      
-      const rangeMonths = this.ranges.find(r => r.value === this.selectedRange).months;
-      let newStartDate = new Date(this.startDate);
-      let newEndDate = new Date(this.endDate);
-      
-      if (this.selectedRange === 'month') {
-        newStartDate.setMonth(this.startDate.getMonth() + step);
-        newEndDate.setMonth(this.endDate.getMonth() + step);
-      } else {
-        newStartDate.setMonth(this.startDate.getMonth() + (step * rangeMonths));
-        newEndDate.setMonth(this.endDate.getMonth() + (step * rangeMonths));
-      }
-
-      // Handle direction switch at bounds
-      if (newStartDate.getFullYear() === 2000 && newStartDate.getMonth() === 0) {
-        this.playDirection = 'ltr';
-        this.startDate = new Date(2000, 0, 1);
-        this.endDate = new Date(2000, rangeMonths, 0);
-      } else if (newEndDate.getFullYear() === 2024 && newEndDate.getMonth() === 11) {
-        this.playDirection = 'rtl';
-        this.endDate = new Date(2024, 11, 31);
-        this.startDate = new Date(2024, 12 - rangeMonths, 1);
-      } else if (step > 0 && newEndDate > this.maxDate) {
-        this.setRangeFromDate(new Date(2000, 0, 1));
-      } else if (step < 0 && newStartDate < this.minDate) {
-        this.setRangeFromDate(new Date(2024, 11, 1));
-      } else {
-        this.startDate = newStartDate;
-        this.endDate = newEndDate;
-      }
-      
-      this.applyDateFilter();
-      this.scrollToCurrentRange();
-    },
-
-    playBackwards() {
-      this.playDirection = -1;
-      this.startPlayback();
-    },
-
-    startPlayback() {
-      if (this.playbackInterval) {
-        clearInterval(this.playbackInterval);
-      }
-      
-      this.isPlaying = true;
-      const intervalTime = 1000 / this.playbackSpeed;
-      
-      this.playbackInterval = setInterval(() => {
-        const startYear = new Date(this.startDate).getFullYear();
-        if (startYear === 2000 && this.playDirection === 'rtl') {
-          this.playDirection = 'ltr';
-        }
-        this.moveRange(this.playDirection === 'rtl' ? -1 : 1);
-      }, intervalTime);
-    },
-
-    toggleBackwardsPlay() {
-      if (this.selectedRange === 'all') {
-        this.selectedRange = 'month';
-      }
-      if (this.isPlayingBackwards) {
-        this.stopAllPlayback();
-      } else {
-        this.playDirection = 'rtl';
-        this.isPlayingBackwards = true;
-        this.startPlayback();
-      }
-    },
-
-    togglePlayback() {
-      if (this.selectedRange === 'all') {
-        this.selectedRange = 'month';
-      }
-      if (this.isPlaying) {
-        this.stopAllPlayback();
-      } else {
-        this.playDirection = 'ltr';
-        this.isPlaying = true;
-        this.startPlayback();
-      }
-    },
-
-    stopPlayback() {
-      this.isPlaying = false;
-      if (this.playbackInterval) {
-        clearInterval(this.playbackInterval);
-        this.playbackInterval = null;
-      }
-    },
-    
-    isYearInRange(year) {
-    if (!this.startDate || !this.endDate || this.selectedRange === 'all') return false;
-    
-    // Create date objects for the start and end of the year
-    const yearStart = new Date(year, 0, 1);
-    const yearEnd = new Date(year, 11, 31);
-    
-    // A year is in range if any part of the selected range overlaps with it
-    return (
-      // Either the range start date falls within this year
-      (this.startDate >= yearStart && this.startDate <= yearEnd) ||
-      // Or the range end date falls within this year
-      (this.endDate >= yearStart && this.endDate <= yearEnd) ||
-      // Or the range completely encompasses this year
-      (this.startDate <= yearStart && this.endDate >= yearEnd)
-    );
-  },
-
-    // Range dragging functionality
-    startRangeDrag(event) {
-      this.isDragging = true;
-      this.dragStartX = event.clientX;
-      document.addEventListener('mousemove', this.handleRangeDrag);
-      document.addEventListener('mouseup', this.stopRangeDrag);
-    },
-
-    handleRangeDrag(event) {
-      if (!this.isDragging) return;
-      
-      const deltaX = event.clientX - this.dragStartX;
-      const containerWidth = this.$el.querySelector('.histogram-container').offsetWidth;
-      const monthMove = Math.round((deltaX / containerWidth) * this.monthlyData.length);
-      
-      if (Math.abs(monthMove) >= 1) {
-        this.moveRange(monthMove);
-        this.dragStartX = event.clientX;
-      }
-    },
-
-    stopRangeDrag() {
-      this.isDragging = false;
-      document.removeEventListener('mousemove', this.handleRangeDrag);
-      document.removeEventListener('mouseup', this.stopRangeDrag);
-    },
-    advanceDate() {
-      const nextDate = new Date(this.currentDate);
-      nextDate.setMonth(nextDate.getMonth() + 1);
-      
-      // Check if we've reached the end
-      if (nextDate > this.maxDate) {
-        // Loop back to start
-        this.currentDate = new Date(this.minDate);
-      } else {
-        this.currentDate = nextDate;
-      }
-      
-      this.setRangeFromDate(this.currentDate);
-    },
-    setPlaybackSpeed(speed) {
-      this.playbackSpeed = speed;
-      if (this.isPlaying) {
-        this.stopPlayback();
-        this.startPlayback();
-      }
-    },
-    applyDateFilter() {
-      if (!this.startDate || !this.endDate) return;
-      
-      const filteredFeatures = this.getFilteredFeatures().filter(feature => {
-        if (!feature.properties.date) return false;
-        const featureDate = new Date(feature.properties.date);
-        return featureDate >= this.startDate && featureDate <= this.endDate;
-      });
-
-      this.displayedFeatureCount = filteredFeatures.length;
-      this.addMarkers(filteredFeatures);
-    },
-
-
- 
-
-    handleBarClick(month) {
-    const clickedDate = new Date(month.date);
-    
-    // If in 'all' range, switch to month range
-    if (this.selectedRange === 'all') {
-      this.selectedRange = 'month';
-    }
-    
-    if (this.selectedRange === 'month') {
-      this.startDate = new Date(clickedDate.getFullYear(), clickedDate.getMonth(), 1);
-      this.endDate = new Date(clickedDate.getFullYear(), clickedDate.getMonth() + 1, 0);
-    } else {
-      this.setRangeFromDate(clickedDate);
-    }
-    
-    this.showRangeOverlay = true;
-    this.applyDateFilter();
-  },
-
-    processFeaturesByCoordinates() {
-      if (!this.geojsonData) return;
-
-      const clauseSet = new Set();
-      const nameSet = new Set();
-      const dates = [];
-
-      this.geojsonData.features.forEach((feature) => {
-        if (feature.properties.date) {
-          const parsedDate = new Date(feature.properties.date);
-          if (!isNaN(parsedDate)) {
-            dates.push(parsedDate);
-            feature.parsedDate = parsedDate;
-          }
-        }
-
-        if (Array.isArray(feature.properties.clauses)) {
-          feature.properties.clauses.forEach((clause) => clauseSet.add(clause));
-        }
-
-        if (feature.properties.name) {
-          nameSet.add(feature.properties.name);
-        }
-      });
-
-      if (dates.length > 0) {
-        this.minDate = new Date(Math.min(...dates));
-        this.maxDate = new Date(Math.max(...dates));
-        
-        const today = new Date();
-        this.currentDate = today > this.maxDate ? this.maxDate : today;
-        
-        this.startDate = this.minDate;
-        this.endDate = this.maxDate;
-      }
-
-      this.clauses = Array.from(clauseSet).sort();
-      this.names = Array.from(nameSet).sort();
-      this.displayedFeatureCount = this.geojsonData.features.length;
-    },
-    initializeZoomSlider() {
-      const zoomSliderElement = this.$refs.zoomSlider;
-      
-      if (!zoomSliderElement || !this.map) return;
-
-      if (this.zoomSlider) {
-        this.zoomSlider.destroy();
-      }
-
-      const minZoom = this.map.getMinZoom();
-      const maxZoom = this.map.getMaxZoom();
-      const currentZoom = this.map.getZoom();
-
-      this.zoomSlider = noUiSlider.create(zoomSliderElement, {
-        start: [currentZoom],
-        orientation: 'vertical',
-        direction: 'rtl',
-        range: {
-          'min': minZoom,
-          'max': maxZoom
-        },
-        step: 0.5,
-        tooltips: false
-      });
-
-      this.zoomSlider.on('slide', (values) => {
-        const zoom = parseFloat(values[0]);
-        this.map.easeTo({ zoom: zoom });
-      });
-
-      // Update slider when map is zoomed by other means
-      this.map.on('zoom', () => {
-        const currentZoom = this.map.getZoom();
-        this.zoomSlider.set([currentZoom]);
-      });
-    },
-
-    zoomIn() {
-      const currentZoom = this.map.getZoom();
-      this.map.easeTo({ zoom: currentZoom + 1 });
-    },
-
-    zoomOut() {
-      const currentZoom = this.map.getZoom();
-      this.map.easeTo({ zoom: currentZoom - 1 });
-    },
-    handleSearch() {
-      if (!this.searchQuery) {
-        return;
-      }
-
-      const isNumeric = /^\d/.test(this.searchQuery);
-      const category = isNumeric ? 'clauses' : 'names';
-      
-      // Always show filters panel and set active category when searching
-      this.filtersVisible = true;
-      this.activeFilterCategory = category;
-    },
-    toggleFilter(type, value) {
-      switch(type) {
-        case 'names':
-          // Create a new array to trigger reactivity
-          if (this.selectedNames.includes(value)) {
-            this.selectedNames = this.selectedNames.filter(name => name !== value);
-          } else {
-            this.selectedNames = [...this.selectedNames, value];
-          }
-          break;
-        case 'clauses':
-          if (this.selectedClauses.includes(value)) {
-            this.selectedClauses = this.selectedClauses.filter(clause => clause !== value);
-          } else {
-            this.selectedClauses = [...this.selectedClauses, value];
-          }
-          break;
-        case 'tags':
-          if (this.selectedTags.includes(value)) {
-            this.selectedTags = this.selectedTags.filter(tag => tag !== value);
-          } else {
-            this.selectedTags = [...this.selectedTags, value];
-          }
-          break;
-      }
-      // The filters will now automatically apply due to the watchers on selectedNames, selectedClauses, and selectedTags
-    },
-    handleSearchEnter() {
-      const isNumeric = /^\d/.test(this.searchQuery);
-      const items = isNumeric ? this.filteredClauses : this.filteredNames;
-      
-      if (items.length === 1) {
-        const result = items[0];
-        if (isNumeric) {
-          // Add to existing selection instead of replacing
-          if (!this.selectedClauses.includes(result)) {
-            this.selectedClauses.push(result);
-          }
-        } else {
-          // Add to existing selection instead of replacing
-          if (!this.selectedNames.includes(result)) {
-            this.selectedNames.push(result);
-          }
-        }
-        
-        this.clearSearch();
-        this.closeFiltersPanel();
-        this.applyFilters();
-      }
-    },
-
-    clearSearch() {
-      this.searchQuery = '';
-    },
-
-    closeFiltersPanel() {
-      this.filtersVisible = false;
-      this.activeFilterCategory = null;
-    },
-    scrollHistogramToEnd() {
-    this.$nextTick(() => {
-      const histogramWrapper = this.$el.querySelector('.histogram-wrapper');
-      if (histogramWrapper) {
-        histogramWrapper.scrollLeft = histogramWrapper.scrollWidth;
-      }
-    });
-  },
-    setActiveFilter(category) {
-      if (this.activeFilterCategory === category) {
-        this.closeFiltersPanel();
-      } else {
-        this.activeFilterCategory = category;
-        this.filtersVisible = true;
-        this.clearSearch();
-      }
-    },
-
-    handleClickOutside(event) {
-      const filtersPanel = this.$refs.filtersPanel;
-      const filtersToggleContainer = this.$refs.filtersToggleContainer;
-
-      if (
-        filtersPanel &&
-        !filtersPanel.contains(event.target) &&
-        filtersToggleContainer &&
-        !filtersToggleContainer.contains(event.target)
-      ) {
-        // Use closeFiltersPanel to ensure both panel is closed and active-panel is removed
-        this.closeFiltersPanel();
-      }
-    },
-
-    handleSliderContainerClick(event) {
-  // Only enable if clicking on the slider area
-  if (event.target.classList.contains('noUi-connects') ||
-      event.target.classList.contains('noUi-handle')) {
-    this.dateSliderEnabled = true;
-    this.applyFilters();
-  }
-},
-
-processFilteredDates() {
-    const monthCounts = {};
-    const yearCounts = {};
-    const dates = [];
-
-    // Process only filtered features
-    this.baseFilteredFeatures.forEach(feature => {
-      if (feature.properties.date) {
-        const date = new Date(feature.properties.date);
-        if (!isNaN(date.getTime())) {
-          dates.push(date);
-          
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          const yearKey = date.getFullYear();
-          
-          monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1;
-          yearCounts[yearKey] = (yearCounts[yearKey] || 0) + 1;
-        }
-      }
-    });
-
-    // Update date range based on filtered features
-    if (dates.length > 0) {
-      this.minDate = new Date(Math.min(...dates));
-      this.maxDate = new Date(Math.max(...dates));
-      
-      // Only update current date if it's outside the new range
-      if (this.currentDate > this.maxDate) {
-        this.currentDate = this.maxDate;
-      } else if (this.currentDate < this.minDate) {
-        this.currentDate = this.minDate;
-      }
-
-      // Update range dates
-      if (this.startDate > this.maxDate || this.startDate < this.minDate) {
-        this.startDate = this.minDate;
-      }
-      if (this.endDate > this.maxDate || this.endDate < this.minDate) {
-        this.endDate = this.maxDate;
-      }
-    }
-
-    // Update histogram data
-    this.monthlyData = Object.entries(monthCounts)
-      .map(([key, count]) => {
-        const [year, month] = key.split('-');
-        return {
-          date: key,
-          count,
-          label: new Date(year, parseInt(month) - 1).toLocaleDateString('ru-RU', {
-            year: 'numeric',
-            month: 'long'
-          })
-        };
-      })
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    this.yearlyData = Object.entries(yearCounts)
-      .map(([year, count]) => ({
-        year: parseInt(year),
-        count
-      }))
-      .sort((a, b) => a.year - b.year);
-
-    this.maxCount = Math.max(...this.monthlyData.map(m => m.count), 1);
-
-    // Reinitialize slider with new range if in range mode
-    if (this.dateMode === 'range' && this.dateSlider) {
-      this.$nextTick(() => {
-        this.initializeDateSlider();
-      });
-    }
-  },
-
-  // Update watchers to trigger date processing
-  watch: {
-    selectedClauses: {
-      handler() {
-        this.processFilteredDates();
-        this.applyFilters();
-      }
-    },
-    selectedTags: {
-      handler() {
-        this.processFilteredDates();
-        this.applyFilters();
-      }
-    },
-    selectedNames: {
-      handler() {
-        this.processFilteredDates();
-        this.applyFilters();
-      }
+    selectedNames() {
+      this.applyFilters()
     },
     startDate() {
-    this.$nextTick(() => {
-      this.scrollToCurrentRange();
-    });
-  },
-    monthlyData: {
-      handler() {
-        if (this.selectedRange !== 'all' && this.showRangeOverlay) {
-          this.$nextTick(() => {
-            // Force reactive update of overlay
-            this.showRangeOverlay = false;
-            this.$nextTick(() => {
-              this.showRangeOverlay = true;
-            });
-          });
-        }
-      },
-      deep: true
+      this.updateSliderFromDates()
     },
-    selectedRange: {
-        immediate: true,
-        handler(newRange) {
-          if (newRange !== 'all') {
-            this.$nextTick(() => {
-              this.showRangeOverlay = true;
-            });
-          }
-        }
-      }
-  },
-
-  // Update initializeDateSlider method
-  initializeDateSlider() {
-    const sliderElement = this.$refs.dateSlider;
-    
-    if (!sliderElement || !this.minDate || !this.maxDate) return;
-
-    if (this.dateSlider) {
-      this.dateSlider.destroy();
-    }
-
-    const initialConfig = {
-      start: this.dateMode === 'date' 
-        ? [this.currentDate.getTime()]
-        : [this.startDate.getTime(), this.endDate.getTime()],
-      connect: true,
-      range: {
-        min: this.minDate.getTime(),
-        max: this.maxDate.getTime()
-      },
-      step: 24 * 60 * 60 * 1000,
-      tooltips: false
-    };
-
-    this.dateSlider = noUiSlider.create(sliderElement, initialConfig);
-
-    this.dateSlider.on('start', () => {
-      if (!this.dateSliderEnabled) {
-        this.dateSliderEnabled = true;
-      }
-    });
-
-    const debouncedUpdate = debounce(this.updateFromSlider, 300);
-    this.dateSlider.on('update', debouncedUpdate);
-  },
-
-    updateFromSlider(values) {
-      if (this.dateMode === 'date') {
-        this.currentDate = new Date(Number(values[0]));
+    endDate() {
+      this.updateSliderFromDates()
+    },
+    isGraphMode(val) {
+      this.dateSliderEnabled = val
+      if (val) {
+        this.$nextTick(() => { this.initializePlaybackSlider() })
       } else {
-        this.startDate = new Date(Number(values[0]));
-        this.endDate = new Date(Number(values[1]));
+        this.destroyPlaybackInterval()
       }
-      this.applyFilters();
-    },
-
-    buildGraph() {
-    this.processFilteredDates();
-    this.graphBuilt = true;
-    this.needsRebuild = false;
+      this.applyFilters()
+    }
   },
-
-  setDateMode(mode) {
-    // If trying to switch to date mode but not enough features, switch to play
-    if (mode === 'date' && !this.canUseDateMode) {
-      mode = 'play';
-    }
-
-    // If currently in date mode and features drop below threshold, switch to play
-    if (this.dateMode === 'date' && !this.canUseDateMode) {
-      mode = 'play';
-    }
-
-    this.dateMode = mode;
-    this.dateSliderEnabled = false;
-    this.selectedMonthDate = null;
-    this.selectedYear = null;
-    
-    if (mode === 'date') {
-      // Immediately build graph when switching to date mode
-      this.$nextTick(() => {
-        this.buildGraph();
-      });
-    } else {
-      // Initialize slider for other modes
-      this.$nextTick(() => {
-        this.initializeDateSlider();
-      });
-    }
-    
-    this.applyFilters();
+  mounted() {
+    this.initializeMap()
+    document.addEventListener('click', this.handleClickOutside)
+    document.addEventListener('keydown', this.handleKeyDown)
   },
-
-    resetDateSlider() {
-      this.initializeDateSlider();
-      this.applyFilters();
-    },
-    getFilteredFeatures() {
-  if (!this.geojsonData?.features) return [];
-
-  return this.geojsonData.features.filter((feature) => {
-    // Apply name filters
-    if (this.hasActiveNameFilters && 
-        !this.selectedNames.includes(feature.properties.name)) {
-      return false;
-    }
-
-    // Apply clause filters
-    if (this.hasActiveClauseFilters && 
-        !feature.properties.clauses?.some(clause => 
-          this.selectedClauses.includes(clause))) {
-      return false;
-    }
-
-    // Apply tag filters
-    if (this.hasActiveTagFilters && 
-        !feature.properties.tags?.some(tag => 
-          this.selectedTags.includes(tag))) {
-      return false;
-    }
-
-    // Apply date filtering
-    if (this.selectedMonth || this.selectedYear) {
-      if (!feature.properties.date) return false; // Exclude items without dates when date filter is active
-      const date = new Date(feature.properties.date);
-      if (isNaN(date.getTime())) return false;
-
-      if (this.selectedMonth) {
-        return feature.properties.date.startsWith(this.selectedMonth);
-      } else if (this.selectedYear) {
-        return date.getFullYear() === this.selectedYear;
-      }
-    }
-
-    return true;
-  });
-},
-
-
-  
-updateMonthlyData(filteredFeatures) {
-  const monthCounts = {};
-
-  filteredFeatures.forEach(feature => {
-    if (feature.properties.date) {
-      const date = new Date(feature.properties.date);
-      if (!isNaN(date.getTime())) {
-        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        monthCounts[key] = (monthCounts[key] || 0) + 1;
-      }
-    }
-  });
-
-  // Update the monthlyData counts
-  this.monthlyData = this.monthlyData.map(month => {
-    const count = monthCounts[month.date] || 0;
-    return {
-      ...month,
-      count
-    };
-  });
-  this.maxCount = Math.max(...this.monthlyData.map(m => m.count), 1);
-
-// Scroll histogram to end
-this.scrollHistogramToEnd();
-},
-
-  getNonDateFilteredFeatures() {
-  if (!this.geojsonData?.features) return [];
-
-  return this.geojsonData.features.filter((feature) => {
-    // Apply name filters
-    if (this.hasActiveNameFilters && 
-        !this.selectedNames.includes(feature.properties.name)) {
-      return false;
-    }
-
-    // Apply clause filters
-    if (this.hasActiveClauseFilters && 
-        !feature.properties.clauses?.some(clause => 
-          this.selectedClauses.includes(clause))) {
-      return false;
-    }
-
-    // Apply tag filters
-    if (this.hasActiveTagFilters && 
-        !feature.properties.tags?.some(tag => 
-          this.selectedTags.includes(tag))) {
-      return false;
-    }
-
-    // Do not apply date filters
-    return true;
-  });
-},
-
-applyFilters() {
-      // Get features filtered by non-date filters
-      const filteredFeatures = this.getFilteredFeatures();
-      this.displayedFeatureCount = filteredFeatures.length;
-      this.addMarkers(filteredFeatures);
-
-      // Update monthly data for histogram if it's visible
-      if (this.isGraphMode) {
-        const nonDateFilteredFeatures = this.getNonDateFilteredFeatures();
-        this.updateMonthlyData(nonDateFilteredFeatures);
+  beforeUnmount() {
+    this.stopAllPlayback()
+    document.removeEventListener('mousemove', this.handleRangeDrag)
+    document.removeEventListener('mouseup', this.stopRangeDrag)
+    document.removeEventListener('keydown', this.handleKeyDown)
+  },
+  methods: {
+    handleKeyDown(e) {
+      if (e.code === 'Space') {
+        e.preventDefault()
+        this.togglePauseWithMemory()
       }
     },
-
-
-
-
-    resetFilters() {
-  // Reset all filter selections
-  this.selectedClauses = [];
-  this.selectedTags = [];
-  this.selectedNames = [];
-  this.selectedMonthDate = null;
-  this.selectedYear = null;
-    this.isGraphMode = false;
-    this.stopAllPlayback();
-    this.resetDateFilters();
-  
-  // Reset date-related states
-  this.dateSliderEnabled = false;
-  
-  if (this.minDate && this.maxDate) {
-    this.currentDate = this.maxDate;
-    this.startDate = this.minDate;
-    this.endDate = this.maxDate;
-  }
-  
-  // Reset UI states
-  this.filtersVisible = false;
-  this.activeFilterCategory = null;
-  this.clearSearch();
-
-  // Force slider to reset if it exists
-  if (this.dateSlider) {
-    this.dateSlider.destroy();
-    this.dateSlider = null;
-  }
-
-  // Initialize the slider if in range mode
-  this.$nextTick(() => {
-    if (this.dateMode === 'range') {
-      this.initializeDateSlider();
-    }
-  });
-  
-  // Apply the reset filters
-  this.applyFilters();
-},
-
-resetDateFilters() {
-      this.selectedRange = 'all';
-      this.showRangeOverlay = false;
-      this.startDate = null;
-      this.endDate = null;
-      this.playbackSpeed = 1;
-      // Fix for missing clearDateFilters
-      this.startDate = this.minDate;
-      this.endDate = this.maxDate;
-      this.applyDateFilter();
+    togglePauseWithMemory() {
+      if (!this.canPlay || !this.playbackSlider) return
+      const currentIndex = parseInt(this.playbackSlider.noUiSlider.get(), 10)
+      const currentValue = this.allowedPlaybackValues[currentIndex]
+      if (this.isPaused) {
+        // Resume from lastNonZeroIndex
+        this.playbackSlider.noUiSlider.set(this.lastNonZeroIndex)
+      } else {
+        // Pause and store lastNonZeroIndex if current is not 0
+        if (currentValue !== 0) {
+          this.lastNonZeroIndex = currentIndex
+        }
+        // set to pause (0)
+        const zeroIndex = this.allowedPlaybackValues.indexOf(0)
+        this.playbackSlider.noUiSlider.set(zeroIndex)
+      }
     },
+    initializeMap() {
 
 
-     async loadMarkerImages() {
-      return Promise.all([
+mapboxgl.accessToken = 'pk.eyJ1IjoidnVmb3JpYSIsImEiOiJjbTJybXJiaWsxOHVnMmpzYnZtZWk4ZXB1In0.24OWriNL8SBYXoLdBtO9EA'; // Replace with your Mapbox access token
+   
+
+
+      this.map = new mapboxgl.Map({
+        container: this.$refs.mapContainer,
+        style: 'mapbox://styles/mapbox/navigation-night-v1',
+        center: [96.712933, 62.917018],
+        zoom: 5
+      })
+      this.map.addControl(new MapboxLanguage({ defaultLanguage: 'ru' }))
+      this.map.on('load', () => {
+        this.loadGeoJSONData()
+        this.initializeZoomSlider()
+      })
+    },
+    async loadGeoJSONData() {
+      const response = await fetch('/main783Date_Geo.geojson')
+      this.geojsonData = await response.json()
+      await Promise.all([
         new Promise((resolve, reject) => {
-          this.map.loadImage('/custom-marker.png', (error, image) => {
-            if (error) reject(error);
-            if (!this.map.hasImage('custom-marker')) {
-              this.map.addImage('custom-marker', image);
-            }
-            resolve();
-          });
+          this.map.loadImage('/custom-marker.png', (e, i) => { if (e) reject(e); if (!this.map.hasImage('custom-marker')) this.map.addImage('custom-marker', i); resolve() })
         }),
         new Promise((resolve, reject) => {
-          this.map.loadImage('/custom-marker-hover.png', (error, image) => {
-            if (error) reject(error);
-            if (!this.map.hasImage('custom-marker-hover')) {
-              this.map.addImage('custom-marker-hover', image);
-            }
-            resolve();
-          });
+          this.map.loadImage('/custom-marker-hover.png', (e, i) => { if (e) reject(e); if (!this.map.hasImage('custom-marker-hover')) this.map.addImage('custom-marker-hover', i); resolve() })
         })
-      ]);
+      ])
+      this.processFeaturesByCoordinates()
+      this.processDateData()
+      this.addMarkers()
     },
-    addMarkers(filteredFeatures = null) {
-    const features = filteredFeatures || this.geojsonData.features;
-    const geoJSON = this.prepareGeoJSONForMarkers(features);
-
-    if (!this.map.getSource('features')) {
-      // Initialize source and layers for first time
-      this.map.addSource('features', {
-        type: 'geojson',
-        data: geoJSON,
-        generateId: true
-      });
-
-      // Base marker layer
-      this.map.addLayer({
-        id: 'custom-markers',
-        type: 'symbol',
-        source: 'features',
-        layout: {
-          'icon-image': 'custom-marker',
-          'icon-size': [
-            'interpolate',
-            ['linear'],
-            ['get', 'point_count'],
-            1, 0.5,
-            3, 0.8,
-            7, 1
-          ],
-          'icon-allow-overlap': true
-        },
-        paint: {
-          'icon-opacity': [
-            'case',
-            ['boolean', ['feature-state', 'hover'], false],
-            0,  // When hovered, this layer is invisible
-            ['number', ['get', 'opacity'], 0.3]  // Use the feature property for opacity
-          ]
+    processFeaturesByCoordinates() {
+      if (!this.geojsonData) return
+      const clauseSet = new Set()
+      const nameSet = new Set()
+      const dates = []
+      this.geojsonData.features.forEach(f => {
+        if (f.properties.date) {
+          const d = new Date(f.properties.date)
+          if (!isNaN(d)) dates.push(d)
         }
-      });
-
-      // Hover layer
-      this.map.addLayer({
-        id: 'custom-markers-hover',
-        type: 'symbol',
-        source: 'features',
-        layout: {
-          'icon-image': 'custom-marker-hover',
-          'icon-size': 1.2,
-          'icon-allow-overlap': true
-        },
-        paint: {
-          'icon-opacity': [
-            'case',
-            ['boolean', ['feature-state', 'hover'], false],
-            1,  // When hovered, this layer is visible
-            0   // When not hovered, this layer is invisible
-          ]
-        }
-      });
-
-      // Add hover effects
-      let hoveredStateId = null;
-      
-      this.map.on('mousemove', 'custom-markers', (e) => {
-        if (e.features.length > 0) {
-          if (hoveredStateId !== null) {
-            this.map.setFeatureState(
-              { source: 'features', id: hoveredStateId },
-              { hover: false }
-            );
-          }
-          hoveredStateId = e.features[0].id;
-          this.map.setFeatureState(
-            { source: 'features', id: hoveredStateId },
-            { hover: true }
-          );
-          this.map.getCanvas().style.cursor = 'pointer';
-        }
-      });
-
-      this.map.on('mouseleave', 'custom-markers', () => {
-        if (hoveredStateId !== null) {
-          this.map.setFeatureState(
-            { source: 'features', id: hoveredStateId },
-            { hover: false }
-          );
-          hoveredStateId = null;
-          this.map.getCanvas().style.cursor = '';
-        }
-      });
-
-      // Add click handlers
-      ['custom-markers', 'custom-markers-hover'].forEach(layerId => {
-        this.map.on('click', layerId, (e) => {
-          if (e.features.length > 0) {
-            const features = JSON.parse(e.features[0].properties.features);
-            this.showFeatureList(features);
-          }
-        });
-      });
-
-      // Animate initial markers
-      setTimeout(() => {
-        this.animateInitialMarkers(geoJSON.features);
-      }, 100);
-    } else {
-      // Update existing source
-      const source = this.map.getSource('features');
-      if (source) {
-        source.setData(geoJSON);
-        this.animateNewMarkers(geoJSON.features);
-      }
-    }
-  },
-
-  prepareGeoJSONForMarkers(features) {
-    const featuresByCoordinates = {};
-    const currentSource = this.map.getSource('features');
-    const existingCoords = currentSource ? 
-      new Set(currentSource.serialize().data.features.map(f => f.geometry.coordinates.join(','))) :
-      new Set();
-    
-    features.forEach((feature) => {
-      const coords = feature.geometry.coordinates.join(',');
-      if (!featuresByCoordinates[coords]) {
-        featuresByCoordinates[coords] = [];
-      }
-      featuresByCoordinates[coords].push(feature);
-    });
-
-    return {
-      type: 'FeatureCollection',
-      features: Object.entries(featuresByCoordinates).map(([coords, groupedFeatures]) => {
-        const [lng, lat] = coords.split(',').map(Number);
-        const isNew = !existingCoords.has(coords);
-        
-        return {
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [lng, lat]
-          },
-          properties: {
-            point_count: groupedFeatures.length,
-            features: JSON.stringify(groupedFeatures),
-            isNew: isNew,
-            opacity: 1  // Start with full opacity
-          }
-        };
+        if (Array.isArray(f.properties.clauses)) f.properties.clauses.forEach(c => clauseSet.add(c))
+        if (f.properties.name) nameSet.add(f.properties.name)
       })
-    };
-  },
+      if (dates.length > 0) {
+        this.minDate = new Date(2000, 0, 1)
+        this.maxDate = new Date(2024, 11, 31)
+        this.startDate = this.minDate
+        this.endDate = this.maxDate
+        this.selectedRangeMonths = null
+      }
+      this.clauses = Array.from(clauseSet).sort()
+      this.names = Array.from(nameSet).sort()
+      this.displayedFeatureCount = this.geojsonData.features.length
+    },
+    processDateData() {
+      if (!this.geojsonData?.features) return
+      const datedFeatures = this.geojsonData.features.filter(f => f.properties.date && !isNaN(new Date(f.properties.date)))
+      if (datedFeatures.length === 0) return
+      this.minDate = new Date(2000, 0, 1)
+      this.maxDate = new Date(2024, 11, 31)
+      this.startDate = new Date(this.minDate)
+      this.endDate = new Date(this.maxDate)
+      const monthCounts = {}
+      datedFeatures.forEach(ft => {
+        const d = new Date(ft.properties.date)
+        const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+        monthCounts[k] = (monthCounts[k] || 0) + 1
+      })
+      const md = []
+      let cy = this.minDate.getFullYear()
+      let cm = this.minDate.getMonth()
+      const ey = this.maxDate.getFullYear()
+      const em = this.maxDate.getMonth()
+      while (cy < ey || (cy === ey && cm <= em)) {
+        const k = cy + '-' + String(cm + 1).padStart(2, '0')
+        const c = monthCounts[k] || 0
+        const date = new Date(cy, cm)
+        md.push({ date: k, count: c, label: date.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' }), year: cy, month: cm })
+        cm++
+        if (cm > 11) { cm = 0; cy++ }
+      }
+      this.monthlyData = md
+      this.maxCount = Math.max(...md.map(m => m.count), 1)
+      const ys = [...new Set(md.map(m => m.year))]
+      this.yearLabels = ys.map(y => ({ year: y, width: (md.filter(m => m.year === y).length / md.length) * 100 }))
+      this.totalMonths = ((this.maxDate.getFullYear() - this.minDate.getFullYear()) * 12) + (this.maxDate.getMonth() - this.minDate.getMonth()) + 1
+      this.selectedRangeMonths = this.totalMonths
+      this.$nextTick(() => { this.initializeDateRangeSlider(); this.scrollHistogramToEnd() })
+    },
+    updateMonthlyData(filteredFeatures) {
+      const datedFiltered = filteredFeatures.filter(f => f.properties.date && !isNaN(new Date(f.properties.date)))
+      const monthCounts = {}
+      datedFiltered.forEach(ft => {
+        const d = new Date(ft.properties.date)
+        const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        monthCounts[k] = (monthCounts[k] || 0) + 1
+      })
+      const md = []
+      let cy = this.minDate.getFullYear()
+      let cm = this.minDate.getMonth()
+      const ey = this.maxDate.getFullYear()
+      const em = this.maxDate.getMonth()
+      while (cy < ey || (cy === ey && cm <= em)) {
+        const k = cy + '-' + String(cm + 1).padStart(2, '0')
+        const c = monthCounts[k] || 0
+        const date = new Date(cy, cm)
+        md.push({ date: k, count: c, label: date.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' }), year: cy, month: cm })
+        cm++
+        if (cm > 11) { cm = 0; cy++ }
+      }
+      this.monthlyData = md
+      this.maxCount = Math.max(...md.map(m => m.count), 1)
+      const ys = [...new Set(md.map(m => m.year))]
+      this.yearLabels = ys.map(y => ({ year: y, width: (md.filter(m => m.year === y).length / md.length) * 100 }))
+      this.$nextTick(() => { this.scrollHistogramToEnd() })
+    },
+    applyFilters() {
+      const filtered = this.getFilteredFeatures()
+      let dateFiltered = filtered
+      if (this.dateSliderEnabled) {
+        dateFiltered = filtered.filter(feature => {
+          if (!feature.properties.date) return false
+          const fd = new Date(feature.properties.date)
+          return fd >= this.startDate && fd <= this.endDate
+        })
+      }
+      this.displayedFeatureCount = dateFiltered.length
+      this.addMarkers(dateFiltered)
+      if (this.isGraphMode) {
+        this.updateMonthlyData(filtered)
+      } else {
+        this.updateMonthlyData(filtered)
+      }
+    },
+    getFilteredFeatures() {
+      if (!this.geojsonData?.features) return []
+      return this.geojsonData.features.filter(feat => {
+        if (this.hasActiveNameFilters && !this.selectedNames.includes(feat.properties.name)) return false
+        if (this.hasActiveClauseFilters && !feat.properties.clauses?.some(c => this.selectedClauses.includes(c))) return false
+        if (this.hasActiveTagFilters && !feat.properties.tags?.some(t => this.selectedTags.includes(t))) return false
+        return true
+      })
+    },
+    zoomIn() {
+      this.map.easeTo({ zoom: this.map.getZoom() + 1 })
+    },
+    zoomOut() {
+      this.map.easeTo({ zoom: this.map.getZoom() - 1 })
+    },
+    handleSearch() {
+      if (!this.searchQuery) return
+      const isNum = /^\d/.test(this.searchQuery)
+      const cat = isNum ? 'clauses' : 'names'
+      this.filtersVisible = true
+      this.activeFilterCategory = cat
+    },
+    handleSearchEnter() {
+      const isNum = /^\d/.test(this.searchQuery)
+      const items = isNum ? this.filteredClauses : this.filteredNames
+      if (items.length === 1) {
+        const r = items[0]
+        if (isNum && !this.selectedClauses.includes(r)) this.selectedClauses.push(r)
+        else if (!isNum && !this.selectedNames.includes(r)) this.selectedNames.push(r)
+        this.clearSearch()
+        this.closeFiltersPanel()
+        this.applyFilters()
+      }
+    },
+    clearSearch() {
+      this.searchQuery = ''
+    },
+    closeFiltersPanel() {
+      this.filtersVisible = false
+      this.activeFilterCategory = null
+    },
+    setActiveFilter(cat) {
+      if (this.activeFilterCategory === cat) this.closeFiltersPanel()
+      else {
+        this.activeFilterCategory = cat
+        this.filtersVisible = true
+        this.clearSearch()
+      }
+    },
+    toggleFilter(type, val) {
+      if (type === 'names') {
+        if (this.selectedNames.includes(val)) this.selectedNames = this.selectedNames.filter(n => n !== val)
+        else this.selectedNames = [...this.selectedNames, val]
+      }
+      if (type === 'clauses') {
+        if (this.selectedClauses.includes(val)) this.selectedClauses = this.selectedClauses.filter(c => c !== val)
+        else this.selectedClauses = [...this.selectedClauses, val]
+      }
+      if (type === 'tags') {
+        if (this.selectedTags.includes(val)) this.selectedTags = this.selectedTags.filter(t => t !== val)
+        else this.selectedTags = [...this.selectedTags, val]
+      }
+      this.applyFilters()
+    },
+    resetFilters() {
+      this.selectedClauses = []
+      this.selectedTags = []
+      this.selectedNames = []
+      this.selectedMonth = null
+      this.selectedYear = null
+      this.isGraphMode = false
+      this.stopAllPlayback()
+      this.dateSliderEnabled = false
+      if (this.minDate && this.maxDate) {
+        this.startDate = this.minDate
+        this.endDate = this.maxDate
+      }
+      this.filtersVisible = false
+      this.activeFilterCategory = null
+      this.clearSearch()
+      if (this.dateRangeSlider && this.dateRangeSlider.noUiSlider) this.dateRangeSlider.noUiSlider.destroy()
+      this.selectedRangeMonths = this.totalMonths
+      this.$nextTick(() => { this.initializeDateRangeSlider() })
+      this.applyFilters()
+    },
+    toggleGraphMode() {
+      this.stopAllPlayback()
+      this.isGraphMode = !this.isGraphMode
+      this.dateSliderEnabled = this.isGraphMode
+      if (!this.isGraphMode) {
+        this.selectedRangeMonths = this.totalMonths
+        this.startDate = this.minDate
+        this.endDate = this.maxDate
+        this.applyFilters()
+      } else {
+        this.$nextTick(() => {
+          this.selectedRangeMonths = this.totalMonths
+          if (this.dateRangeSlider && this.dateRangeSlider.noUiSlider) this.dateRangeSlider.noUiSlider.set(this.totalMonths)
+          this.scrollHistogramToEnd()
+          this.applyFilters()
+        })
+      }
+    },
+    isMonthActive(m) {
+      if (this.selectedMonth) return this.selectedMonth === m.date
+      if (this.selectedYear) return m.year === this.selectedYear
+      return true
+    },
+    isInCurrentRange(m) {
+      if (!this.dateSliderEnabled) return true
+      if (!this.startDate || !this.endDate) return true
+      const md = new Date(m.year, m.month)
+      return md >= this.startDate && md <= this.endDate
+    },
+    isYearInRange(y) {
+      if (!this.dateSliderEnabled) return false
+      if (!this.startDate || !this.endDate) return false
+      const ys = new Date(y, 0, 1)
+      const ye = new Date(y, 11, 31)
+      return ((this.startDate >= ys && this.startDate <= ye) || (this.endDate >= ys && this.endDate <= ye) || (this.startDate <= ys && this.endDate >= ye))
+    },
+    handleHistogramClick(e) {
+      if (!this.dateSliderEnabled) return
+      const c = e.currentTarget
+      const r = c.getBoundingClientRect()
+      const x = e.clientX - r.left
+      const bw = r.width / this.monthlyData.length
+      const idx = Math.floor(x / bw)
+      if (idx >= 0 && idx < this.monthlyData.length) this.handleBarClick(this.monthlyData[idx])
+    },
+    handleBarClick(m) {
+      if (!this.dateSliderEnabled) return
+      const p = m.date.split('-')
+      const y = parseInt(p[0], 10)
+      const mo = parseInt(p[1], 10) - 1
+      this.endDate = new Date(y, mo, new Date(y, mo + 1, 0).getDate())
+      this.updateDateRangeFromMonths()
+    },
+    handleYearClick(y) {
+      if (!this.dateSliderEnabled) return
+      this.selectedRangeMonths = 12
+      this.endDate = new Date(y, 11, 31)
+      this.updateDateRangeFromMonths()
+      if (this.dateRangeSlider && this.dateRangeSlider.noUiSlider) this.dateRangeSlider.noUiSlider.set(12)
+    },
+    showMonthTooltip(evt, m) {
+      const bar = evt.target
+      const rect = bar.getBoundingClientRect()
+      this.tooltipStyle = { left: rect.left + (rect.width / 2) + 'px', top: rect.top + 'px' }
+      this.tooltipData = m
+    },
+    showYearTooltip(evt, y) {
+      const el = evt.target
+      const r = el.getBoundingClientRect()
+      const c = this.getYearFeatureCount(y.year)
+      if (c > 0) {
+        this.tooltipStyle = { left: r.left + (r.width / 2) + 'px', top: r.top + 'px' }
+        this.tooltipData = { label: y.year + ' год', count: c }
+      }
+    },
+    hideTooltip() {
+      this.tooltipData = null
+    },
+    getYearFeatureCount(y) {
+      return this.monthlyData.filter(m => m.year === y).reduce((sum, m) => sum + m.count, 0)
+    },
+    getBarOpacity(m) {
+      if (this.selectedMonth) return this.selectedMonth === m.date ? 1 : 0.3
+      if (this.selectedYear) return m.year === this.selectedYear ? 1 : 0.3
+      return 1
+    },
+    startRangeDrag(e) {
+      if (!this.dateSliderEnabled) return
+      this.isDragging = true
+      this.dragStartX = e.clientX
+      document.addEventListener('mousemove', this.handleRangeDrag)
+      document.addEventListener('mouseup', this.stopRangeDrag)
+    },
+    handleRangeDrag(evt) {
+      if (!this.isDragging || !this.dateSliderEnabled) return
+      const dx = evt.clientX - this.dragStartX
+      const cw = this.$el.querySelector('.histogram-container').offsetWidth
+      const tm = this.monthlyData.length
+      const dm = Math.round((dx / cw) * tm)
+      if (dm !== 0) {
+        const months = this.selectedRangeMonths
+        this.startDate.setMonth(this.startDate.getMonth() + dm)
+        this.endDate = new Date(this.startDate)
+        this.endDate.setMonth(this.startDate.getMonth() + (months - 1))
+        if (this.endDate > this.maxDate) {
+          this.startDate = new Date(this.minDate)
+          this.endDate = new Date(this.startDate)
+          this.endDate.setMonth(this.startDate.getMonth() + (months - 1))
+        } else if (this.startDate < this.minDate) {
+          this.endDate = new Date(this.maxDate)
+          this.startDate = new Date(this.endDate)
+          this.startDate.setMonth(this.endDate.getMonth() - (months - 1))
+        }
+        this.applyFilters()
+        this.updateSliderFromDates()
+        this.dragStartX = evt.clientX
+      }
+    },
+    stopRangeDrag() {
+      this.isDragging = false
+      document.removeEventListener('mousemove', this.handleRangeDrag)
+      document.removeEventListener('mouseup', this.stopRangeDrag)
+    },
+    scrollHistogramToEnd() {
+      this.$nextTick(() => {
+        const w = this.$el.querySelector('.histogram-wrapper')
+        if (w) w.scrollLeft = w.scrollWidth
+      })
+    },
+    scrollToCurrentRange() {
+      if (!this.dateSliderEnabled) return
+      if (!this.startDate || !this.endDate) return
+      const c = this.$el.querySelector('.histogram-wrapper')
+      const sc = this.$el.querySelector('.histogram-scroll-container')
+      if (!c || !sc) return
+      const sk = this.startDate.getFullYear() + '-' + String(this.startDate.getMonth() + 1).padStart(2, '0')
+      const idx = this.monthlyData.findIndex(m => m.date === sk)
+      if (idx === -1) return
+      const tw = sc.scrollWidth
+      const cw = c.offsetWidth
+      const bw = tw / this.monthlyData.length
+      const tp = (bw * idx) - (cw / 3)
+      c.scrollTo({ left: Math.max(0, tp), behavior: 'smooth' })
+    },
+    moveRange(step) {
+      if (!this.dateSliderEnabled) return
+      if (!this.startDate || !this.endDate) return
+      const m = this.selectedRangeMonths
+      const ns = new Date(this.startDate)
+      ns.setMonth(ns.getMonth() + step)
+      const ne = new Date(ns)
+      ne.setMonth(ns.getMonth() + (m - 1))
+      if (ne > this.maxDate) {
+        this.startDate = new Date(this.minDate)
+        this.endDate = new Date(this.startDate)
+        this.endDate.setMonth(this.startDate.getMonth() + (m - 1))
+      } else if (ns < this.minDate) {
+        this.endDate = new Date(this.maxDate)
+        this.startDate = new Date(this.endDate)
+        this.startDate.setMonth(this.endDate.getMonth() - (m - 1))
+      } else {
+        this.startDate = ns
+        this.endDate = ne
+      }
+      this.applyFilters()
+      this.updateSliderFromDates()
+      this.scrollToCurrentRange()
+    },
+    stopAllPlayback() {
+      this.isPlaying = false
+      this.isPlayingBackwards = false
+      this.isPaused = true
+      if (this.playbackInterval) clearInterval(this.playbackInterval)
+      this.playbackInterval = null
+    },
+    destroyPlaybackInterval() {
+      if (this.playbackInterval) clearInterval(this.playbackInterval)
+      this.playbackInterval = null
+    },
+    setPlaybackSpeedAndDirectionIndex(idx) {
+      // idx is an integer 0-8
+      const value = this.allowedPlaybackValues[idx]
+      if (value === 0) {
+        this.isPlaying = false
+        this.isPlayingBackwards = false
+        this.isPaused = true
+        this.destroyPlaybackInterval()
+      } else {
+        this.isPaused = false
+        this.playbackSpeed = Math.abs(value)
+        if (value > 0) {
+          this.isPlaying = true
+          this.isPlayingBackwards = false
+        } else {
+          this.isPlaying = true
+          this.isPlayingBackwards = true
+        }
+        this.updatePlaybackInterval()
+      }
+    },
+    updatePlaybackInterval() {
+      this.destroyPlaybackInterval()
+      if (!this.isPlaying) return
+      const it = 1000 / this.playbackSpeed
+      this.playbackInterval = setInterval(() => {
+        this.moveRange(this.isPlayingBackwards ? -1 : 1)
+      }, it)
+    },
+    initializeZoomSlider() {
+      const e = this.$refs.zoomSlider
+      if (!e || !this.map) return
+      const mi = this.map.getMinZoom()
+      const ma = this.map.getMaxZoom()
+      const cz = this.map.getZoom()
+      noUiSlider.create(e, { start: [cz], orientation: 'vertical', direction: 'rtl', range: { min: mi, max: ma }, step: 0.5, tooltips: false })
+      e.noUiSlider.on('slide', v => { this.map.easeTo({ zoom: parseFloat(v[0]) }) })
+      this.map.on('zoom', () => { e.noUiSlider.set([this.map.getZoom()]) })
+    },
+    initializePlaybackSlider() {
+      if (!this.$refs.playbackSlider) return
+      const e = this.$refs.playbackSlider
+      if (e.noUiSlider) e.noUiSlider.destroy()
 
-  animateInitialMarkers(features) {
-    features.forEach((feature) => {
-      setTimeout(() => {
-        this.animateMarker(feature);
-      }, Math.random() * 3000); // Random delay up to 2 seconds
-    });
-  },
-
-  animateNewMarkers(features) {
-    features
-      .filter(f => f.properties.isNew)
-      .forEach((feature) => {
-        setTimeout(() => {
-          this.animateMarker(feature);
-        }, Math.random() * 3000); // Random delay up to 1 second for new markers
-      });
-  },
-
-  animateMarker(feature) {
-    const source = this.map.getSource('features');
-    if (!source) return;
-
-    const animationSteps = [
-      { opacity: 0.2, duration: 0 },    
-      { opacity: 0.8, duration: 300 },  
-      { opacity: 0.4, duration: 600 },    
-      { opacity: 0.5, duration: 900 }
-    ];
-
-    const animate = async (step = 0) => {
-      if (step >= animationSteps.length) return;
-
-      const currentStep = animationSteps[step];
-      
-      // Update the feature's opacity property in the source data
-      const sourceData = source.serialize().data;
-      const featureIndex = sourceData.features.findIndex(f => 
-        f.geometry.coordinates[0] === feature.geometry.coordinates[0] &&
-        f.geometry.coordinates[1] === feature.geometry.coordinates[1]
-      );
-
-      if (featureIndex !== -1) {
-        sourceData.features[featureIndex].properties.opacity = currentStep.opacity;
-        source.setData(sourceData);
+      // We'll map our allowed values to indices: 0..8
+      // allowedPlaybackValues: [-8,-4,-2,-1,0,1,2,4,8]
+      // indices:                0   1   2   3 4 5 6 7 8
+      // Default start at index of 0 value => index=4
+      const startIndex = this.allowedPlaybackValues.indexOf(0) // 0 speed -> pause
+      const format = {
+        to: (v) => {
+          const val = this.allowedPlaybackValues[v]
+          if (val === 0) return 'Pause'
+          return val + 'x'
+        },
+        from: () => {
+          // not used since we don't let user type values
+          return 4
+        }
       }
 
-      // Schedule next step
-      if (step < animationSteps.length - 1) {
-        setTimeout(() => animate(step + 1), currentStep.duration);
+      noUiSlider.create(e, {
+        start: [startIndex],
+        range: {
+          'min': 0,
+          'max': 8
+        },
+        step: 1,
+        tooltips: [format],
+        pips: {
+          mode: 'values',
+          values: [0,1,2,3,4,5,6,7,8],
+          format: {
+            to: (v) => {
+              const val = this.allowedPlaybackValues[v]
+              if (val === 0) return 'Pause'
+              return val + 'x'
+            }
+          },
+          density: 10
+        }
+      })
+
+      this.playbackSlider = e
+      e.noUiSlider.on('update', (vals) => {
+        const idx = parseInt(vals[0], 10)
+        this.setPlaybackSpeedAndDirectionIndex(idx)
+      })
+    },
+    initializeDateRangeSlider() {
+      const el = this.$refs.dateRangeSlider
+      if (!el) return
+      if (this.dateRangeSlider && this.dateRangeSlider.noUiSlider) this.dateRangeSlider.noUiSlider.destroy()
+
+      const maxVal = this.totalMonths
+      const format = {
+        to: (v) => {
+          const val = parseInt(v, 10)
+          if (val === maxVal) return '2000 - 2024'
+          if (val === 120) return '10л'
+          if (val === 60) return '5л'
+          if (val === 48) return '4г'
+          if (val === 36) return '3г'
+          if (val === 24) return '2г'
+          if (val === 18) return '1.5г'
+          if (val === 12) return '1г'
+          if (val === 6) return '6м'
+          if (val === 3) return '3м'
+          if (val === 1) return '1м'
+          if (val > 12) {
+            const yrs = Math.floor(val / 12)
+            const ms = val % 12
+            return ms === 0 ? yrs + 'г' : yrs + ' г ' + ms + 'м'
+          }
+          return val + 'м'
+        },
+        from: () => {}
       }
-    };
 
-    animate();
-  },
-      
-
-    showFeatureList(features) {
-      this.currentFeatures = features;
-      this.selectedFeature = null;
-      this.showModal = true;
+      noUiSlider.create(el, {
+        start: [this.selectedRangeMonths],
+        connect: [true, false],
+        direction: 'rtl',
+        range: {
+          'min': [1],
+          '10%': [3],
+          '20%': [6],
+          '30%': [12],
+          '40%': [18],
+          '50%': [24],
+          '60%': [36],
+          '70%': [60],
+          '80%': [120],
+          'max': [maxVal]
+        },
+        step: null,
+        tooltips: [format],
+        pips: {
+          mode: 'values',
+          values: [maxVal, 120, 60, 36, 24, 18, 12, 6, 3, 1],
+          format: format,
+          density: 4
+        }
+      })
+      this.dateRangeSlider = el
+      el.noUiSlider.on('update', (vals) => {
+        const nrm = Math.round(parseFloat(vals[0]))
+        if (this.selectedRangeMonths !== nrm) {
+          this.selectedRangeMonths = nrm
+          this.updateDateRangeFromMonths()
+        }
+      })
+      const pipEls = el.querySelectorAll('.noUi-value')
+      pipEls.forEach(p => {
+        p.style.cursor = 'pointer'
+        p.addEventListener('click', ev => {
+          const txt = ev.target.innerText
+          let val = maxVal
+          if (txt.includes('10л')) val = 120
+          else if (txt.includes('5л')) val = 60
+          else if (txt.includes('3г')) val = 36
+          else if (txt.includes('2г')) val = 24
+          else if (txt.includes('1.5г')) val = 18
+          else if (txt.includes('1г')) val = 12
+          else if (txt.includes('6м')) val = 6
+          else if (txt.includes('3м')) val = 3
+          else if (txt.includes('1м')) val = 1
+          else if (txt.includes('2000 - 2024')) val = maxVal
+          el.noUiSlider.set(val)
+        })
+      })
     },
+    updateDateRangeFromMonths() {
+      if (!this.dateSliderEnabled) {
+        this.startDate = new Date(this.minDate)
+        this.endDate = new Date(this.maxDate)
+        this.applyFilters()
+        return
+      }
 
-    showFeatureDetails(feature) {
-      this.selectedFeature = feature;
+      const m = this.selectedRangeMonths
+      if (m === this.totalMonths) {
+        this.startDate = new Date(this.minDate)
+        this.endDate = new Date(this.maxDate)
+      } else {
+        const ad = this.endDate || this.maxDate
+        const ay = ad.getFullYear()
+        const am = ad.getMonth()
+        const sm = ay * 12 + am - (m - 1)
+        const sy = Math.floor(sm / 12)
+        const sM = sm % 12
+        this.startDate = new Date(sy, sM, 1)
+        this.endDate = new Date(ay, am + 1, 0)
+        if (this.startDate < this.minDate) {
+          this.startDate = new Date(this.minDate)
+          this.endDate = new Date(this.startDate)
+          this.endDate.setMonth(this.startDate.getMonth() + (m - 1))
+          if (this.endDate > this.maxDate) this.endDate = new Date(this.maxDate)
+        }
+        if (this.endDate > this.maxDate) {
+          this.endDate = new Date(this.maxDate)
+          this.startDate = new Date(this.endDate)
+          this.startDate.setMonth(this.endDate.getMonth() - (m - 1))
+          if (this.startDate < this.minDate) this.startDate = new Date(this.minDate)
+        }
+      }
+      this.applyFilters()
     },
-
+    updateSliderFromDates() {
+      if (!this.dateRangeSlider || !this.dateRangeSlider.noUiSlider) return
+      const ms = ((this.endDate.getFullYear() - this.startDate.getFullYear()) * 12) + (this.endDate.getMonth() - this.startDate.getMonth()) + 1
+      if (ms !== this.selectedRangeMonths) {
+        this.selectedRangeMonths = ms
+        this.dateRangeSlider.noUiSlider.set(ms)
+      }
+    },
+    addMarkers(filtered = null) {
+      const feats = filtered || this.geojsonData.features
+      const gj = this.prepareGeoJSONForMarkers(feats)
+      if (!this.map.getSource('features')) {
+        this.map.addSource('features', { type: 'geojson', data: gj, generateId: true })
+        this.map.addLayer({
+          id: 'custom-markers',
+          type: 'symbol',
+          source: 'features',
+          layout: { 'icon-image': 'custom-marker', 'icon-size': ['interpolate', ['linear'], ['get', 'point_count'], 1, 0.5, 3, 0.8, 7, 1], 'icon-allow-overlap': true },
+          paint: {
+            'icon-opacity': [
+              'case',
+              ['boolean', ['feature-state', 'hover'], false], 1,
+              0.7
+            ]
+          }
+        })
+        this.map.addLayer({
+          id: 'custom-markers-hover',
+          type: 'symbol',
+          source: 'features',
+          layout: { 'icon-image': 'custom-marker-hover', 'icon-size': 1.2, 'icon-allow-overlap': true },
+          paint: {
+            'icon-opacity': [
+              'case',
+              ['boolean', ['feature-state', 'hover'], false],
+              1, 0
+            ]
+          }
+        })
+        let hId = null
+        this.map.on('mousemove', 'custom-markers', e => {
+          if (e.features.length > 0) {
+            if (hId !== null) this.map.setFeatureState({ source: 'features', id: hId }, { hover: false })
+            hId = e.features[0].id
+            this.map.setFeatureState({ source: 'features', id: hId }, { hover: true })
+            this.map.getCanvas().style.cursor = 'pointer'
+          }
+        })
+        this.map.on('mouseleave', 'custom-markers', () => {
+          if (hId !== null) this.map.setFeatureState({ source: 'features', id: hId }, { hover: false })
+          hId = null
+          this.map.getCanvas().style.cursor = ''
+        })
+        ;['custom-markers', 'custom-markers-hover'].forEach(l => {
+          this.map.on('click', l, e => {
+            if (e.features.length > 0) {
+              const f = JSON.parse(e.features[0].properties.features)
+              this.showFeatureList(f)
+            }
+          })
+        })
+      } else {
+        const s = this.map.getSource('features')
+        if (s) {
+          s.setData(gj)
+        }
+      }
+    },
+    prepareGeoJSONForMarkers(feats) {
+      const byCoord = {}
+      feats.forEach(f => {
+        const c = f.geometry.coordinates.join(',')
+        if (!byCoord[c]) byCoord[c] = []
+        byCoord[c].push(f)
+      })
+      return {
+        type: 'FeatureCollection',
+        features: Object.entries(byCoord).map(([c, gf]) => {
+          const [lng, lat] = c.split(',').map(Number)
+          return {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [lng, lat] },
+            properties: { point_count: gf.length, features: JSON.stringify(gf) }
+          }
+        })
+      }
+    },
+    showFeatureList(fs) {
+      this.currentFeatures = fs
+      this.selectedFeature = null
+      this.showModal = true
+    },
+    showFeatureDetails(f) {
+      this.selectedFeature = f
+    },
     backToList() {
-      this.selectedFeature = null;
+      this.selectedFeature = null
     },
-
     closeModal() {
-      this.showModal = false;
-      this.selectedFeature = null;
+      this.showModal = false
+      this.selectedFeature = null
     },
-
-    getImageUrl(filename) {
-      return `/images/${filename}`;
+    getImageUrl(fn) {
+      return '/images/' + fn
+    },
+    handleClickOutside(e) {
+      const fp = this.$refs.filtersPanel
+      const ftc = this.$refs.filtersToggleContainer
+      if (fp && !fp.contains(e.target) && ftc && !ftc.contains(e.target)) this.closeFiltersPanel()
     }
   }
-};
+}
 </script>
-
  
-
 <style>
  
 .play-pause-controls {
@@ -2262,7 +1121,9 @@ body {
   border-radius: 4px;
   min-width: 500px;
 }
-
+.playback-slider-container{
+  min-width: 250px;
+}
 /* Modal styles */
 .modal {
   position: fixed;
@@ -2598,14 +1459,32 @@ body{
 #app .date-slider-container *{
   color: white !important;
 }
-.noUi-connect, .play-pause-controls button{
-  background-color: rgba(0,0,0,0.6) !important;
-}
 .Linkink{
   display: none;
 }
-
-
+.noUi-horizontal .noUi-tooltip{
+  font-size: 8px;
+}
+.noUi-marker-horizontal.noUi-marker{
+  display: none;
+}
+.noUi-horizontal{
+  height: 10px;
+}
+.noUi-value-horizontal{
+  font-size: 10px !important;
+}
+.noUi-horizontal .noUi-tooltip{
+  background-color: black;
+}
+.noUi-horizontal .noUi-handle{
+  background-color: black;
+  height: 20px;
+  box-shadow: none;
+}
+.noUi-connect{
+  background-color: white;
+}
 /* Disabled State Styles */
 .date-slider-container.disabled {
   opacity: 0.5; /* Faded effect */
@@ -2663,6 +1542,7 @@ body{
   background: rgba(0, 0, 0, 0.6);
   padding: 10px;
   border-radius: 4px;
+  display: none;
 }
 .zoom-button {
   width: 30px;
@@ -2777,7 +1657,7 @@ body{
   width: -moz-max-content;
   width: max-content;
   margin: 0 auto;
-} 
+}
 .histogram-wrapper::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
@@ -2880,12 +1760,6 @@ body{
 .stats-group {
   margin-left: auto;
 }
-.date-stats {
-  color: white;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 .feature-counter {
   opacity: 0.7;
   font-size: 0.9em;
@@ -2914,10 +1788,9 @@ body{
 .range-selection-overlay {
   position: absolute;
   height: 100%;
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.2);
   pointer-events: none;
   z-index: 1;
-  transition: left 0.3s ease, width 0.3s ease;
 }
 .active.histogram-bar:not(.in-range) {
   opacity: 0.5 !important;
@@ -2989,7 +1862,7 @@ body{
   background-color: rgba(0, 0, 0, 0.6);
   padding: 0;
   border-radius: 4px;
-  width: calc(100vw - 111px);
+  width: calc(100vw - 25px);
   height: 100%;
   display: inline-block;
 }
@@ -3000,7 +1873,7 @@ body{
   gap: 15px;
   align-items: center;
   margin-bottom: 15px;
-  width: calc(100vw - 111px);
+  width: calc(100vw - 40px);
   max-width: 100%;
 }
 
@@ -3047,7 +1920,6 @@ body{
   background-color: rgba(255, 255, 255, 0.9) !important;
   color: black !important;
 }
-
 #app .control-buttons-row  .control-button.active{
   color: black !important;
 }
@@ -3059,6 +1931,8 @@ body{
   display: flex;
   align-items: center;
   gap: 10px;
+  justify-content: center;
+  padding-top: 10px;
 }
 .feature-counter {
   opacity: 0.7;
@@ -3086,13 +1960,182 @@ body{
   align-items: flex-end;
   border-bottom: 1px solid #fff;
 }
+.playback-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.speed-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: 15px;
+}
+.control-button {
+  padding: 8px 12px;
+  background-color: rgba(0, 0, 0, 0.6);
+  border: 1px solid white;
+  border-radius: 4px;
+  cursor: pointer;
+  color: white;
+  min-width: 40px;
+  text-align: center;
+}
+.control-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.control-button.active {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  color: black !important;
+}
+
+/* Ensure consistent spacing in the controls row */
+.control-buttons-row {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: nowrap;
+  padding: 10px;
+}
+
+/* Make controls group more compact */
+.controls-group {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+
+ 
+
+/* Basic styling for histogram wrapper and scrollbar */
+.histogram-wrapper {
+  position: relative;
+  overflow: auto;
+  white-space: nowrap;
+}
+.histogram-scroll-container {
+  position: relative;
+  display: inline-block;
+}
+.range-selection-overlay:active {
+  cursor: grabbing;
+}
+
+/* Year labels */
+.year-labels {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.year-label {
+  cursor: pointer;
+  -webkit-user-select: none;
+     -moz-user-select: none;
+          user-select: none;
+}
+.year-label.highlighted {
+  font-weight: bold;
+}
+
+/* Tooltip */
+.histogram-tooltip {
+  position: fixed;
+  background: #333;
+  color: #fff;
+  padding: 6px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+/* Date sliders and controls */
+.date-range-slider-container {
+  width: 200px;
+  margin: 0 10px;
+}
+.speed-slider-container {
+  width: 150px;
+  margin-left: 10px;
+}
+
+/* Playback and control buttons */
+.control-buttons-row {
+  display: flex;
+  align-items: center;
+}
+.control-button {
+  cursor: pointer;
+  margin: 0 4px;
+  background: #f0f0f0;
+  border: none;
+  padding: 6px 8px;
+  transition: background 0.2s;
+}
+.control-button.active {
+  background: #ddd;
+}
+
+/* Filters, inputs and other UI elements */
+.filters-toggle-container, .filters, .date-stats, .feature-count, .search-input {
+  /* Add your preferred styling */
+}
+
+/* Modal and feature list */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+}
+.modal-content {
+  position: absolute;
+  background: #fff;
+  padding: 20px;
+  max-width: 500px;
+  width: 100%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.close-button {
+  float: right;
+  cursor: pointer;
+}
+
+/* Adjust as needed */
+.feature-list-item:hover {
+  background: #f0f0f0;
+  cursor: pointer;
+}
+
+/* Adjust zoom slider container */
+.zoom-slider-container {
+  height: 100px;
+  margin: 0 6px;
+  display: flex;
+  align-items: center;
+}
+
+/* Additional refinements as needed */
+
+
+
+
+
+
+
+
 
 /* Responsive styles */
-@media (max-width: 1100px) {
-.date-slider-container {
-    width: calc(100% - 40px);
-}
-}
 @media (max-width: 980px) {
 .control-buttons-row {
     flex-wrap: wrap;
@@ -3118,9 +2161,6 @@ body{
     right: auto !important;
     bottom: 150px !important;
 }
-.date-slider-container{
-    width: calc(100% - 40px);
-}
 .filters{
     height:calc(100vh - 333px);
 }
@@ -3129,6 +2169,52 @@ body{
 }
 }
 @media (max-width: 980px) {
+.playback-slider-container { 
+	display: block;
+	width: 80%; 
+	margin-left: auto;
+	margin-right: auto;
+}
+.histogram-wrapper{
+    display: block;
+	width: 80%; 
+	margin-left: auto;
+	margin-right: auto;
+}
+.control-buttons-row > button{
+    position: fixed;
+    left: 20px;
+    bottom: 20px;
+    z-index: 999;
+  
+    padding: 8px 12px;
+  background-color: black;
+  border: 1px solid white;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+.date-slider-container > .histogram-wrapper {
+	margin-bottom: 185px;
+	padding-top: 20px;
+}
+.date-range-slider-container{
+    display: block;
+    width: 80%;
+    margin-bottom: 60px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.filter-checkbox{
+    position: fixed;
+    bottom: 20px;
+    left: 100px
+}
+.controls-group{
+    display: block;
+    width: 100%;
+    margin-bottom: 50px;
+}
 .filters-toggle-container  .feature-count{
     right:  10px !important;
     left: auto !important;
@@ -3172,5 +2258,17 @@ body{
 
 
 
+ 
+ 
+ 
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+ 
  
  </style>
